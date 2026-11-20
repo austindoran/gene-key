@@ -30,38 +30,23 @@
   <main>
     <!-- CLOCK -->
     <section id="view-clock" class="view active">
-      <div id="clockIdle">
-        <div class="seg" id="rateSeg">
-          <button data-rate="STANDARD" class="on">Standard</button>
-          <button data-rate="DRIVING">Driving</button>
-        </div>
-        <input id="descInput" class="field big" placeholder="Client / job (e.g. Michael Rowe)" autocomplete="off" autocapitalize="words">
+      <form id="addForm" class="add-form" autocomplete="off">
+        <label>Date<input class="field" name="date" type="date" required></label>
+        <input class="field big" name="desc" placeholder="Client / job (e.g. Michael Rowe)" autocapitalize="words">
         <div id="recentChips" class="chips"></div>
-        <button id="clockInBtn" class="punch in">
-          <span class="punch-label">CLOCK IN</span>
-          <span class="punch-sub" id="clockInSub"></span>
-        </button>
-      </div>
-
-      <div id="clockActive" hidden>
-        <div class="active-card">
-          <div class="active-top">
-            <span class="pill" id="activeRate">STANDARD</span>
-            <button class="link" data-act="edit-active">Edit</button>
-          </div>
-          <div class="active-desc" id="activeDesc">—</div>
-          <div class="elapsed" id="elapsed">0:00:00</div>
-          <div class="muted" id="activeSince">Since —</div>
-          <div class="muted" id="activeEarn"></div>
+        <div class="seg" id="rateSeg">
+          <button type="button" data-rate="STANDARD" class="on">Standard</button>
+          <button type="button" data-rate="DRIVING">Driving</button>
         </div>
-        <button id="clockOutBtn" class="punch out">
-          <span class="punch-label">CLOCK OUT</span>
-          <span class="punch-sub" id="clockOutSub"></span>
-        </button>
-        <button id="switchBtn" class="btn ghost wide">Switch job / start driving →</button>
-      </div>
+        <div class="grid2">
+          <label>Start<select class="field time-pick" name="start"></select></label>
+          <label>End<select class="field time-pick" name="end"></select></label>
+        </div>
+        <div class="add-calc" id="addCalc">—</div>
+        <button type="submit" class="btn primary wide big-btn">Add to timesheet</button>
+      </form>
 
-      <h3 class="section-h">Today</h3>
+      <h3 class="section-h" id="dayListH">Today</h3>
       <div id="todayList" class="list"></div>
     </section>
 
@@ -128,7 +113,7 @@
   </main>
 
   <nav class="tabs">
-    <button data-tab="clock" class="on"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Clock</button>
+    <button data-tab="clock" class="on"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Add</button>
     <button data-tab="log"><svg viewBox="0 0 24 24"><path d="M5 6h14M5 12h14M5 18h9"/></svg>Log</button>
     <button data-tab="invoice"><svg viewBox="0 0 24 24"><path d="M6 3h9l3 3v15H6z"/><path d="M9 10h6M9 14h6M9 18h3"/></svg>Invoice</button>
     <button data-tab="settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></svg>Settings</button>
@@ -148,8 +133,8 @@
     <input class="field" name="desc" placeholder="Description" autocapitalize="words">
     <label>Date<input class="field" name="date" type="date" required></label>
     <div class="grid2">
-      <label>Start<input class="field" name="start" type="time" required></label>
-      <label id="endLabel">End<input class="field" name="end" type="time"></label>
+      <label>Start<select class="field time-pick" name="start"></select></label>
+      <label id="endLabel">End<select class="field time-pick" name="end"></select></label>
     </div>
     <div class="muted" id="entryCalc"></div>
     <div class="grid2">

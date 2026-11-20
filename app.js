@@ -7,7 +7,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '1.1.0';
+  const VERSION = '2.0.0';
   const KEY = 'timeclock.v1';
   const HOUR = 3600000;
   const DAY = 86400000;
@@ -170,35 +170,61 @@
     $('#periodSummary').textContent = `${qtyRound(hrs)} h · ${money(tot)}${cur ? ' · this period' : ''}`;
   }
 
-  function renderClock() {
-    const r = running();
-    $('#clockIdle').hidden = !!r; $('#clockActive').hidden = !r;
-    if (r) {
-      $('#activeRate').textContent = r.rate; $('#activeRate').className = 'pill ' + r.rate;
-      $('#activeDesc').textContent = r.desc || '(no description)';
-      $('#activeSince').textContent = 'Since ' + clock12(new Date(r.start)) + (roundTime(r.start) !== Math.floor(r.start / 60000) * 60000 ? ` (billed from ${clock12(new Date(roundTime(r.start)))})` : '');
-      tick();
-    } else {
-      const chips = recentDescs();
-      $('#recentChips').innerHTML = chips.map((c, i) => `<button class="chip" data-chip="${i}">${esc(c.desc)}</button>`).join('');
-      $('#recentChips').querySelectorAll('.chip').forEach(b => b.onclick = () => {
-        const c = chips[Number(b.dataset.chip)]; $('#descInput').value = c.desc; setRate(c.rate); haptic();
-      });
-      $('#clockInSub').textContent = 'at ' + clock12(new Date(roundTime(Date.now())));
+  // ---------- add form (works like a row in the Numbers sheet) ----------
+  const STEP = () => Number(db.settings.roundMin) > 0 ? Number(db.settings.roundMin) : 15;
+  function fillTimeSelects(root) {
+    const step = STEP(); let opts = '';
+    for (let m = 0; m < 1440; m += step) {
+      const v = `${pad(Math.floor(m / 60))}:${pad(m % 60)}`;
+      const d = new Date(2000, 0, 1, Math.floor(m / 60), m % 60);
+      opts += `<option value="${v}">${clock12(d)}</option>`;
     }
-    const today = ymd(new Date());
-    const list = db.entries.filter(e => ymd(new Date(e.start)) === today).sort((a, b) => a.start - b.start);
-    $('#todayList').innerHTML = list.map(entryRow).join('');
+    root.querySelectorAll('select.time-pick').forEach(sel => { const keep = sel.value; sel.innerHTML = opts; if (keep) sel.value = keep; });
+  }
+  const toMin = v => { const [h, m] = v.split(':').map(Number); return h * 60 + m; };
+  const fromMin = m => { m = ((m % 1440) + 1440) % 1440; return `${pad(Math.floor(m / 60))}:${pad(m % 60)}`; };
+  function snap(v) { const st = STEP(); return fromMin(Math.round(toMin(v) / st) * st); }
+
+  // Next start = end of the last entry that day (so a drive flows into the job), else 9:00 AM.
+  function suggestTimes(date) {
+    const day = db.entries.filter(e => e.end != null && ymd(new Date(e.start)) === date).sort((x, y) => y.end - x.end)[0];
+    const start = day ? snap(hm(new Date(roundTime(day.end)))) : '09:00';
+    return { start, end: fromMin(toMin(start) + 60) };
+  }
+  function resetAddForm(keepDate) {
+    const f = $('#addForm');
+    if (!keepDate || !f.elements.date.value) f.elements.date.value = ymd(new Date());
+    const t = suggestTimes(f.elements.date.value);
+    f.elements.start.value = t.start; f.elements.end.value = t.end;
+    f.elements.desc.value = '';
+    updateAddCalc();
+  }
+  function addFormEntry() {
+    const f = $('#addForm'); const date = f.elements.date.value;
+    if (!date || !f.elements.start.value || !f.elements.end.value) return null;
+    const start = atTime(date, f.elements.start.value).getTime();
+    let end = atTime(date, f.elements.end.value).getTime();
+    if (end <= start) end += DAY; // past midnight
+    return { rate: selRate, desc: f.elements.desc.value.trim(), start, end };
+  }
+  function updateAddCalc() {
+    const e = addFormEntry(); const out = $('#addCalc'); if (!e) { out.textContent = ''; return; }
+    const h = billHours(e);
+    out.innerHTML = `<span>${fmtQty(h)} h × ${money(rateOf(e.rate))}</span><b>${money(amount(e))}</b>` + (new Date(e.end).getDate() !== new Date(e.start).getDate() ? '<small>ends next day</small>' : '');
   }
 
-  function tick() {
-    const r = running();
-    if (!r) { if (!$('#clockIdle').hidden) $('#clockInSub').textContent = 'at ' + clock12(new Date(roundTime(Date.now()))); return; }
-    $('#elapsed').textContent = fmtDur(Date.now() - r.start);
-    $('#activeEarn').textContent = `${fmtQty(billHours(r))} h billable · ${money(amount(r))}`;
-    $('#clockOutSub').textContent = 'at ' + clock12(new Date(roundTime(Date.now())));
-    const row = document.querySelector(`.entry.running[data-id="${r.id}"]`);
-    if (row) { row.querySelector('.e-amt').textContent = money(amount(r)); row.querySelector('.e-qty').textContent = fmtQty(billHours(r)) + ' h'; }
+  function renderClock() {
+    const chips = recentDescs();
+    $('#recentChips').innerHTML = chips.map((c, i) => `<button type="button" class="chip" data-chip="${i}">${esc(c.desc)}</button>`).join('');
+    $('#recentChips').querySelectorAll('.chip').forEach(b => b.onclick = () => {
+      const c = chips[Number(b.dataset.chip)]; $('#addForm').elements.desc.value = c.desc; setRate(c.rate); updateAddCalc(); haptic();
+    });
+    const date = $('#addForm').elements.date.value || ymd(new Date());
+    const d = parseYmd(date);
+    $('#dayListH').textContent = date === ymd(new Date()) ? 'Today' : `${DOW[d.getDay()]} ${Mon[d.getMonth()]} ${d.getDate()}`;
+    const list = db.entries.filter(e => ymd(new Date(e.start)) === date).sort((a, b) => a.start - b.start);
+    $('#todayList').innerHTML = list.map(entryRow).join('');
+    updateAddCalc();
   }
 
   function renderLog() {
@@ -274,24 +300,6 @@
   }
 
   // ---------- actions ----------
-  function clockIn(at) {
-    if (running()) return;
-    const desc = $('#descInput').value.trim();
-    const start = at ?? Date.now();
-    db.entries.push({ id: uid(), rate: selRate, desc, start, end: null });
-    save(); haptic(); $('#descInput').value = '';
-    viewPeriod = periodIndexFor(new Date(start));
-    toast(`Clocked in ${clock12(new Date(start))}`);
-    renderAll();
-  }
-  function clockOut() {
-    const r = running(); if (!r) return null;
-    let end = Date.now(); if (end < r.start) end = r.start;
-    r.end = end; save(); haptic();
-    toast(`Clocked out · ${fmtQty(billHours(r))} h · ${money(amount(r))}`);
-    renderAll(); return end;
-  }
-
   // Edit sheet
   let editing = null; let entryRate = 'STANDARD';
   function setEntryRate(r) { entryRate = r; $$('#entryRateSeg button').forEach(b => b.classList.toggle('on', b.dataset.rate === r)); updateCalc(); }
@@ -475,18 +483,22 @@
   }
 
   // ---------- wiring ----------
-  $$('#rateSeg button').forEach(b => b.onclick = () => { setRate(b.dataset.rate); haptic(); });
+  $$('#rateSeg button').forEach(b => b.onclick = () => { setRate(b.dataset.rate); updateAddCalc(); haptic(); });
   $$('#entryRateSeg button').forEach(b => b.onclick = () => setEntryRate(b.dataset.rate));
-  $('#clockInBtn').onclick = () => clockIn();
-  $('#clockOutBtn').onclick = () => clockOut();
-  $('#descInput').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('#descInput').blur(); } });
-  $('#switchBtn').onclick = () => {
-    const r = running(); if (!r) return;
-    const nextRate = r.rate === 'DRIVING' ? 'STANDARD' : 'DRIVING';
-    clockOut(); setRate(nextRate);
-    toast(`Clocked out. Pick the next job, then Clock In (${nextRate.toLowerCase()} selected)`);
-    setTimeout(() => $('#descInput').focus(), 50);
-  };
+  $('#addForm').addEventListener('input', e => {
+    if (e.target.name === 'date') { const t = suggestTimes(e.target.value); $('#addForm').elements.start.value = t.start; $('#addForm').elements.end.value = t.end; renderClock(); }
+    updateAddCalc();
+  });
+  $('#addForm').addEventListener('change', updateAddCalc);
+  $('#addForm').addEventListener('submit', e => {
+    e.preventDefault(); const en = addFormEntry(); if (!en) return;
+    if (!en.desc) { toast('Add a client / job'); $('#addForm').elements.desc.focus(); return; }
+    db.entries.push({ id: uid(), ...en }); save(); haptic();
+    toast(`Added ${en.desc} · ${fmtQty(billHours(en))} h · ${money(amount(en))}`);
+    viewPeriod = periodIndexFor(new Date(en.start));
+    resetAddForm(true); renderAll();
+  });
+  $('#addForm').elements.desc.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } });
 
   $$('.tabs button').forEach(b => b.onclick = () => {
     $$('.tabs button').forEach(x => x.classList.toggle('on', x === b));
@@ -502,7 +514,6 @@
     switch (act) {
       case 'prev-period': viewPeriod--; renderAll(); break;
       case 'next-period': viewPeriod++; renderAll(); break;
-      case 'edit-active': { const r = running(); if (r) openSheet(r, false); break; }
       case 'add-entry': {
         const p = periodByIndex(viewPeriod); const today = new Date();
         const base = (today >= p.start && today <= addDays(p.end, 1)) ? today : p.start;
@@ -544,7 +555,7 @@
       db.settings[k] = el.type === 'number' ? Number(el.value) : el.value.trim();
     });
     if (!db.settings.periodAnchor) db.settings.periodAnchor = DEFAULT_SETTINGS.periodAnchor;
-    save(); viewPeriod = periodIndexFor(new Date()); renderAll(); toast('Settings saved');
+    save(); fillTimeSelects(document); viewPeriod = periodIndexFor(new Date()); renderAll(); toast('Settings saved');
   });
 
   $('#invNo').addEventListener('change', e => {
@@ -573,11 +584,11 @@
   $('#installHint').textContent = standalone ? '' : 'Tip: in Safari tap Share → Add to Home Screen so this opens full-screen like an app. The home-screen app keeps its own data, so set it up there.';
   $('#versionLine').textContent = 'Time Clock v' + VERSION;
 
-  setInterval(tick, 1000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) renderAll(); });
   window.addEventListener('hashchange', hashImport);
 
   setRate('STANDARD');
+  fillTimeSelects(document); resetAddForm(false);
   renderAll(); renderSettings();
   hashImport();
 
