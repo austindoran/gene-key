@@ -7,7 +7,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '2.3.0';
+  const VERSION = '2.4.0';
   const KEY = 'timeclock.v1';
   const HOUR = 3600000;
   const DAY = 86400000;
@@ -25,7 +25,7 @@
     dueDays: 2,
     invoiceStart: 2,
     logo: null, // cached logo as a data URL (so PDFs work offline)
-    logoUrl: '',
+    logoUrl: 'icons/ad-logo.png', // bundled AD logo; can point elsewhere in Setup
     emailTo: '',
     emailBody: "Hi,\n\nHere's my invoice for the pay period {period}.\nLet me know if you have any questions.\n\nThank you",
   };
@@ -46,6 +46,8 @@
     return { settings: { ...DEFAULT_SETTINGS }, entries: [], invoiceNos: {} };
   }
   let db = load();
+  // The AD logo now ships with the app, so replace an empty or website logo link with it.
+  if (!db.settings.logoUrl || /squarespace-cdn/.test(db.settings.logoUrl)) { db.settings.logoUrl = 'icons/ad-logo.png'; db.settings.logo = null; }
   function save() {
     try { localStorage.setItem(KEY, JSON.stringify(db)); }
     catch (e) { toast('Could not save: ' + e.message); }
@@ -491,6 +493,7 @@
 
   // Fetch the logo once and keep it as a data URL so PDFs have it, even offline.
   async function ensureLogo(force) {
+    if (!db.settings.logoUrl || /squarespace-cdn/.test(db.settings.logoUrl)) db.settings.logoUrl = 'icons/ad-logo.png';
     const url = (db.settings.logoUrl || '').trim();
     if (!url || (db.settings.logo && !force && db.settings.logoFrom === url)) return;
     try {
