@@ -7,7 +7,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '2.5.0';
+  const VERSION = '2.6.0';
   const KEY = 'timeclock.v1';
   const HOUR = 3600000;
   const DAY = 86400000;
@@ -17,7 +17,7 @@
     payToAddr: '2201 Lamar St, Edgewater, CO 80214',
     billToName: 'Colorado Saunas',
     billToAddr: '7721 W 6th Ave Unit A, Lakewood, CO 80214',
-    rateStandard: 30,
+    rateStandard: 35,
     rateDriving: 20,
     roundMin: 15,
     periodAnchor: '2025-12-15',
@@ -83,6 +83,13 @@
   // ---------- billing ----------
   function rateOf(type) { return type === 'DRIVING' ? Number(db.settings.rateDriving) : type === 'EXPENSE' ? 0 : Number(db.settings.rateStandard); }
   const isExp = e => e.rate === 'EXPENSE';
+  // A row keeps the rate it was billed at once its pay period is over (e.unit); otherwise it uses today's rate.
+  const unitOf = e => e.unit != null ? Number(e.unit) : rateOf(e.rate);
+  // Before a rate changes, pin the old rate on rows from earlier pay periods so past invoices don't change.
+  function lockRate(type, oldRate) {
+    const cutoff = periodByIndex(periodIndexFor(new Date())).start.getTime();
+    db.entries.forEach(e => { if (e.rate === type && e.unit == null && e.start < cutoff) e.unit = Number(oldRate); });
+  }
   // Punches are stored exactly; billing rounds start/end to the nearest roundMin.
   function rawHours(e, now = Date.now()) {
     const s = roundTime(e.start), en = roundTime(e.end ?? now);
@@ -92,7 +99,7 @@
   const qtyRound = h => Math.round(h * 100) / 100;
   function amount(e, now) {
     if (isExp(e)) return Math.round((Number(e.amount) || 0) * 100) / 100;
-    return Math.round(qtyRound(billHours(e, now)) * rateOf(e.rate) * 100) / 100;
+    return Math.round(qtyRound(billHours(e, now)) * unitOf(e) * 100) / 100;
   }
   const money = n => '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const fmtQty = q => String(qtyRound(q));
@@ -293,7 +300,7 @@
   function invoiceModel(p) {
     const s = db.settings; const list = entriesIn(p).filter(e => e.end != null);
     const rows = list.map(e => {
-      const unit = isExp(e) ? amount(e) : rateOf(e.rate);
+      const unit = isExp(e) ? amount(e) : unitOf(e);
       return {
         date: ymd(new Date(e.start)),
         desc: (e.desc || '').toUpperCase(),
@@ -542,7 +549,7 @@
     const q = s => `"${String(s).replace(/"/g, '""')}"`;
     const lines = [['DATE', 'DESCRIPTION', 'RATE', 'QTY', 'UNIT', 'TOTAL', 'START', 'END'].join(',')];
     entriesIn(p).filter(e => e.end != null).forEach(e => {
-      lines.push([ymd(new Date(e.start)), q(e.desc || ''), e.rate, isExp(e) ? 1 : fmtQty(billHours(e)), isExp(e) ? amount(e) : rateOf(e.rate), amount(e).toFixed(2), e.noTimes ? '' : hm(new Date(roundTime(e.start))), e.noTimes ? '' : hm(new Date(roundTime(e.end)))].join(','));
+      lines.push([ymd(new Date(e.start)), q(e.desc || ''), e.rate, isExp(e) ? 1 : fmtQty(billHours(e)), isExp(e) ? amount(e) : unitOf(e), amount(e).toFixed(2), e.noTimes ? '' : hm(new Date(roundTime(e.start))), e.noTimes ? '' : hm(new Date(roundTime(e.end)))].join(','));
     });
     shareText(lines.join('\n'), `Time-${p.key}.csv`, 'text/csv');
   }
@@ -560,6 +567,7 @@
       start: typeof e.start === 'number' ? e.start : new Date(e.start).getTime(),
       end: e.end == null ? null : (typeof e.end === 'number' ? e.end : new Date(e.end).getTime()),
       ...(e.noTimes ? { noTimes: true } : {}),
+      ...(e.unit != null && e.rate !== 'EXPENSE' ? { unit: Number(e.unit) } : {}),
     })).filter(e => !isNaN(e.start));
     const replace = db.entries.length === 0;
     if (replace) db.entries = entries;
@@ -619,6 +627,7 @@
           e = { rate, desc: r[iDesc] || '', start, end };
         } else if (qty > 0) e = { rate, desc: r[iDesc] || '', ...hoursEntryTimes(date, Math.round(qty * 60)) };
         else return;
+        if (!isNaN(unit) && unit > 0) e.unit = unit;
       }
       if (have.has(key(e))) return;
       have.add(key(e)); db.entries.push({ id: uid(), ...e }); added++;
@@ -718,6 +727,9 @@
 
   $('#settingsForm').addEventListener('submit', e => {
     e.preventDefault(); const f = e.target;
+    const oldStd = Number(db.settings.rateStandard), oldDrv = Number(db.settings.rateDriving);
+    if (Number(f.elements.rateStandard.value) !== oldStd) lockRate('STANDARD', oldStd);
+    if (Number(f.elements.rateDriving.value) !== oldDrv) lockRate('DRIVING', oldDrv);
     Object.keys(DEFAULT_SETTINGS).forEach(k => {
       const el = f.elements[k]; if (!el) return;
       db.settings[k] = el.type === 'number' ? Number(el.value) : el.value.trim();
@@ -760,6 +772,10 @@
   document.addEventListener('visibilitychange', () => { if (!document.hidden) renderAll(); });
   window.addEventListener('hashchange', hashImport);
 
+  if (!db.settings.rate35) {
+    if (Number(db.settings.rateStandard) === 30) { lockRate('STANDARD', 30); db.settings.rateStandard = 35; }
+    db.settings.rate35 = true; save();
+  }
   setRate('STANDARD');
   fillTimeSelects(document); fillHourSelects(document); applyMode($('#addForm'), '#modeSeg', addMode()); resetAddForm(false);
   renderAll(); renderSettings();

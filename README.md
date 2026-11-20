@@ -9,7 +9,7 @@ A home-screen iPhone app for clocking in and out and making invoices. It replace
 - **Setup**: names and addresses, invoice email and message, logo link, rates, pay periods, backup and restore. Restore also imports a CSV from Numbers (DATE, DESCRIPTION, RATE, QTY, optional UNIT, START, END).
 
 ## Billing rules (copied from the Numbers sheet)
-- Standard is $30/hr. Driving is $20/hr.
+- Standard is $35/hr (it was $30 before the Nov 16 2026 pay period). Driving is $20/hr. When a rate changes in Setup, rows from earlier pay periods keep the rate they were billed at.
 - Every minute of driving is billed. There's no unpaid first half hour.
 - Start and end times are picked in 15-minute steps.
 - Pay periods are 2 weeks long, counted from Mon Dec 15 2025, which was invoice #02. Each period after that adds one to the invoice number. You can change the number on the Invoice tab.
