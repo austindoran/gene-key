@@ -7,16 +7,16 @@
 (() => {
   'use strict';
 
-  const VERSION = '2.4.0';
+  const VERSION = '2.5.0';
   const KEY = 'timeclock.v1';
   const HOUR = 3600000;
   const DAY = 86400000;
 
   const DEFAULT_SETTINGS = {
-    payToName: '',
-    payToAddr: '',
-    billToName: '',
-    billToAddr: '',
+    payToName: 'Austin Doran',
+    payToAddr: '2201 Lamar St, Edgewater, CO 80214',
+    billToName: 'Colorado Saunas',
+    billToAddr: '7721 W 6th Ave Unit A, Lakewood, CO 80214',
     rateStandard: 30,
     rateDriving: 20,
     roundMin: 15,
@@ -26,8 +26,8 @@
     invoiceStart: 2,
     logo: null, // cached logo as a data URL (so PDFs work offline)
     logoUrl: 'icons/ad-logo.png', // bundled AD logo; can point elsewhere in Setup
-    emailTo: '',
-    emailBody: "Hi,\n\nHere's my invoice for the pay period {period}.\nLet me know if you have any questions.\n\nThank you",
+    emailTo: 'kylie@coloradosaunas.com, Amanda.k.aragon@gmail.com',
+    emailBody: "Hi Kylie and Amanda,\n\nHere's my invoice for the pay period {period}.\nLet me know if you have any questions.\n\nThank you!",
   };
 
   // ---------- storage ----------
@@ -46,6 +46,8 @@
     return { settings: { ...DEFAULT_SETTINGS }, entries: [], invoiceNos: {} };
   }
   let db = load();
+  // Fill in any blank names, addresses or email settings from the defaults.
+  ['payToName', 'payToAddr', 'billToName', 'billToAddr', 'emailTo', 'emailBody'].forEach(k => { if (!String(db.settings[k] || '').trim()) db.settings[k] = DEFAULT_SETTINGS[k]; });
   // The AD logo now ships with the app, so replace an empty or website logo link with it.
   if (!db.settings.logoUrl || /squarespace-cdn/.test(db.settings.logoUrl)) { db.settings.logoUrl = 'icons/ad-logo.png'; db.settings.logo = null; }
   function save() {
