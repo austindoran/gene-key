@@ -7,7 +7,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '2.2.0';
+  const VERSION = '2.3.0';
   const KEY = 'timeclock.v1';
   const HOUR = 3600000;
   const DAY = 86400000;
@@ -24,7 +24,10 @@
     periodDays: 14,
     dueDays: 2,
     invoiceStart: 2,
-    logo: null, // optional data URL
+    logo: null, // cached logo as a data URL (so PDFs work offline)
+    logoUrl: '',
+    emailTo: '',
+    emailBody: "Hi,\n\nHere's my invoice for the pay period {period}.\nLet me know if you have any questions.\n\nThank you",
   };
 
   // ---------- storage ----------
@@ -74,15 +77,19 @@
   }
 
   // ---------- billing ----------
-  function rateOf(type) { return type === 'DRIVING' ? Number(db.settings.rateDriving) : Number(db.settings.rateStandard); }
+  function rateOf(type) { return type === 'DRIVING' ? Number(db.settings.rateDriving) : type === 'EXPENSE' ? 0 : Number(db.settings.rateStandard); }
+  const isExp = e => e.rate === 'EXPENSE';
   // Punches are stored exactly; billing rounds start/end to the nearest roundMin.
   function rawHours(e, now = Date.now()) {
     const s = roundTime(e.start), en = roundTime(e.end ?? now);
     return Math.max(0, (en - s) / HOUR);
   }
-  const billHours = (e, now) => rawHours(e, now);
+  const billHours = (e, now) => isExp(e) ? 0 : rawHours(e, now);
   const qtyRound = h => Math.round(h * 100) / 100;
-  function amount(e, now) { return Math.round(qtyRound(billHours(e, now)) * rateOf(e.rate) * 100) / 100; }
+  function amount(e, now) {
+    if (isExp(e)) return Math.round((Number(e.amount) || 0) * 100) / 100;
+    return Math.round(qtyRound(billHours(e, now)) * rateOf(e.rate) * 100) / 100;
+  }
   const money = n => '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const fmtQty = q => String(qtyRound(q));
   function fmtDur(ms) {
@@ -145,19 +152,22 @@
   function haptic() { if (navigator.vibrate) navigator.vibrate(15); }
 
   function setRate(r) {
+    if (r !== selRate) { selRate = r; applyMode($('#addForm'), '#modeSeg', addMode()); }
     selRate = r;
     $$('#rateSeg button').forEach(b => b.classList.toggle('on', b.dataset.rate === r));
   }
 
   const ICON_TRUCK = '<svg viewBox="0 0 24 24"><path d="M3 7h11v9H3zM14 10h4l3 3v3h-7"/><circle cx="7" cy="17.5" r="1.8"/><circle cx="17" cy="17.5" r="1.8"/></svg>';
+  const ICON_RECEIPT = '<svg viewBox="0 0 24 24"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/></svg>';
   const ICON_SAW = '<svg viewBox="0 0 24 24"><path d="M4 20h16M6 20V9l6-5 6 5v11"/><path d="M10 20v-6h4v6"/></svg>';
   function entryRow(e) {
     const st = new Date(roundTime(e.start)); const en = e.end != null ? new Date(roundTime(e.end)) : null;
-    const drive = e.rate === 'DRIVING';
+    const drive = e.rate === 'DRIVING'; const exp = isExp(e);
+    const detail = exp ? 'Expense' : `${e.noTimes ? 'Hours only' : `${clock12(st)} to ${en ? clock12(en) : '…'}`} · ${fmtQty(billHours(e))} h`;
     return `<button class="row entry" data-id="${e.id}">
-      <span class="badge">${drive ? ICON_TRUCK : ICON_SAW}</span>
-      <span class="nm"><b>${esc(e.desc || 'No name')}${drive ? '<span class="tag">Drive</span>' : ''}</b>
-        <small>${e.noTimes ? 'Hours only' : `${clock12(st)} to ${en ? clock12(en) : '…'}`} · ${fmtQty(billHours(e))} h</small></span>
+      <span class="badge">${exp ? ICON_RECEIPT : drive ? ICON_TRUCK : ICON_SAW}</span>
+      <span class="nm"><b>${esc(e.desc || 'No name')}${drive ? '<span class="tag">Drive</span>' : exp ? '<span class="tag">Expense</span>' : ''}</b>
+        <small>${detail}</small></span>
       <span class="amt">${money(amount(e))}</span>
     </button>`;
   }
@@ -172,6 +182,8 @@
     $('#periodRange').textContent = rangeLabel(p);
     $('#statHours').textContent = String(qtyRound(hrs));
     $('#statEarned').textContent = money(tot);
+    const to = (db.settings.emailTo || '').trim();
+    $('#emailHint').textContent = to ? `Send PDF attaches the invoice. Email opens a message to ${to}; attach the saved PDF from Files.` : 'Send PDF opens the share sheet. Pick Mail to attach it to an email.';
     $('#invNote').textContent = `${rangeLabel(p)} · ${list.length} ${list.length === 1 ? 'row' : 'rows'}`;
   }
 
@@ -195,9 +207,12 @@
   }
   // Mode switch: 'times' (start and end) or 'hours' (just an amount, no time of day)
   function applyMode(form, segSel, mode) {
+    const exp = (form.id === 'addForm' ? selRate : entryRate) === 'EXPENSE';
     document.querySelectorAll(segSel + ' button').forEach(b => b.classList.toggle('on', b.dataset.mode === mode));
-    form.querySelectorAll('.times-only').forEach(el => el.hidden = mode !== 'times');
-    form.querySelectorAll('.hours-only').forEach(el => el.hidden = mode !== 'hours');
+    form.querySelectorAll('.times-only').forEach(el => el.hidden = exp || mode !== 'times');
+    form.querySelectorAll('.hours-only').forEach(el => el.hidden = exp || mode !== 'hours');
+    form.querySelectorAll('.not-expense').forEach(el => el.hidden = exp);
+    form.querySelectorAll('.expense-only').forEach(el => el.hidden = !exp);
   }
   // Hours-only rows are stored from midnight of their date, flagged noTimes.
   function hoursEntryTimes(date, mins) { const start = atTime(date, '00:00').getTime(); return { start, end: start + Number(mins) * 60000, noTimes: true }; }
@@ -216,12 +231,16 @@
     if (!keepDate || !f.elements.date.value) f.elements.date.value = ymd(new Date());
     const t = suggestTimes(f.elements.date.value);
     f.elements.start.value = t.start; f.elements.end.value = t.end;
-    f.elements.desc.value = '';
+    f.elements.desc.value = ''; f.elements.amount.value = '';
     updateAddCalc();
   }
   function addFormEntry() {
     const f = $('#addForm'); const date = f.elements.date.value;
     if (!date) return null;
+    if (selRate === 'EXPENSE') {
+      const start = atTime(date, '00:00').getTime();
+      return { rate: 'EXPENSE', desc: f.elements.desc.value.trim(), start, end: start, noTimes: true, amount: Number(f.elements.amount.value) || 0 };
+    }
     if (addMode() === 'hours') {
       if (!f.elements.hours.value) return null;
       return { rate: selRate, desc: f.elements.desc.value.trim(), ...hoursEntryTimes(date, f.elements.hours.value) };
@@ -235,6 +254,7 @@
   const addMode = () => db.settings.addMode === 'hours' ? 'hours' : 'times';
   function updateAddCalc() {
     const e = addFormEntry(); const out = $('#addCalc'); if (!e) { out.textContent = ''; return; }
+    if (isExp(e)) { out.innerHTML = `<span>Expense · goes on the invoice as qty 1</span><b>${money(amount(e))}</b>`; return; }
     const h = billHours(e);
     out.innerHTML = `<span>${fmtQty(h)} h × ${money(rateOf(e.rate))}</span><b>${money(amount(e))}</b>` + (!e.noTimes && new Date(e.end).getDate() !== new Date(e.start).getDate() ? '<small>ends next day</small>' : '');
   }
@@ -269,12 +289,12 @@
   function invoiceModel(p) {
     const s = db.settings; const list = entriesIn(p).filter(e => e.end != null);
     const rows = list.map(e => {
-      const unit = rateOf(e.rate);
+      const unit = isExp(e) ? amount(e) : rateOf(e.rate);
       return {
         date: ymd(new Date(e.start)),
         desc: (e.desc || '').toUpperCase(),
-        rate: e.rate === 'DRIVING' ? 'Driving' : 'Standard',
-        qty: fmtQty(billHours(e)),
+        rate: isExp(e) ? 'Expense' : e.rate === 'DRIVING' ? 'Driving' : 'Standard',
+        qty: isExp(e) ? '1' : fmtQty(billHours(e)),
         unit: '$' + (Number.isInteger(unit) ? unit : unit.toFixed(2)),
         total: money(amount(e)),
         amt: amount(e),
@@ -285,11 +305,12 @@
     const sm = p.start.getMonth(), em = p.end.getMonth();
     const period = sm === em ? `${Mon[sm]} ${p.start.getDate()}-${p.end.getDate()}` : `${Mon[sm]} ${p.start.getDate()} - ${Mon[em]} ${p.end.getDate()}`;
     return {
-      title: `${MON[em]} INVOICE`, no: padInv(invoiceNo(p)), period,
+      // Named for the month the period starts, like the old invoice creator.
+      title: `${MON[sm]} INVOICE`, no: padInv(invoiceNo(p)), period,
       due: `${pad(due.getMonth() + 1)}.${pad(due.getDate())}.${String(due.getFullYear()).slice(2)}`,
       payTo: [s.payToName, s.payToAddr].filter(Boolean).join(', '),
       billTo: [s.billToName, s.billToAddr].filter(Boolean).join(', '),
-      rows, total, logo: s.logo, open: entriesIn(p).length - list.length,
+      rows, total, logo: s.logo, logoSrc: s.logo || s.logoUrl || '', open: entriesIn(p).length - list.length,
     };
   }
 
@@ -299,7 +320,7 @@
   function renderInvoice() {
     const p = periodByIndex(viewPeriod); const m = invoiceModel(p);
     if (document.activeElement !== $('#invNo')) $('#invNo').value = m.no;
-    const logo = m.logo ? `<img class="inv-logo" src="${m.logo}" alt="">` : LOGO_SVG;
+    const logo = m.logoSrc ? `<img class="inv-logo inv-logo-img" src="${esc(m.logoSrc)}" alt="">` : LOGO_SVG;
     $('#invoicePreview').innerHTML = `<div class="inv-frame">
       <div class="inv-head"><div class="inv-title">${esc(m.title)}</div>${logo}</div>
       <div class="inv-meta">
@@ -312,7 +333,6 @@
       <table class="inv-table"><thead><tr><th>Date</th><th>Description</th><th>Rate</th><th>Qty</th><th>Unit</th><th>Total</th></tr></thead>
       <tbody>${m.rows.map(r => `<tr><td>${r.date}</td><td>${esc(r.desc)}</td><td>${r.rate}</td><td>${r.qty}</td><td>${r.unit}</td><td>${r.total}</td></tr>`).join('') || '<tr><td colspan="6" style="text-align:center;color:#888">No finished entries in this period</td></tr>'}</tbody></table>
       <div class="inv-total">TOTAL: ${money(m.total)}</div>
-      ${m.open ? `<p style="color:#b00">${m.open} entry still clocked in, so it isn't on the invoice yet.</p>` : ''}
     </div>`;
   }
 
@@ -328,7 +348,7 @@
   // ---------- actions ----------
   // Edit sheet
   let editing = null; let entryRate = 'STANDARD'; let entryMode = 'times';
-  function setEntryRate(r) { entryRate = r; $$('#entryRateSeg button').forEach(b => b.classList.toggle('on', b.dataset.rate === r)); updateCalc(); }
+  function setEntryRate(r) { entryRate = r; $$('#entryRateSeg button').forEach(b => b.classList.toggle('on', b.dataset.rate === r)); applyMode($('#entryForm'), '#entryModeSeg', entryMode); updateCalc(); }
   function openSheet(e, isNew) {
     editing = isNew ? null : e;
     const f = $('#entryForm');
@@ -344,6 +364,8 @@
       f.elements.end.value = e.end != null ? hm(new Date(roundTime(e.end))) : '';
       f.elements.hours.value = String(Math.max(STEP(), Math.round(rawHours(e) * 60 / STEP()) * STEP()));
     }
+    f.elements.amount.value = isExp(e) ? (Number(e.amount) || 0).toFixed(2) : '';
+    entryRate = e.rate || 'STANDARD';
     applyMode(f, '#entryModeSeg', entryMode);
     const del = f.querySelector('[data-act="delete-entry"]');
     del.style.visibility = isNew ? 'hidden' : 'visible'; del.textContent = 'Delete'; delete del.dataset.armed;
@@ -354,6 +376,7 @@
   function formToTimes() {
     const f = $('#entryForm'); const date = f.elements.date.value;
     if (!date) return null;
+    if (entryRate === 'EXPENSE') { const start = atTime(date, '00:00').getTime(); return { start, end: start, noTimes: true, amount: Number(f.elements.amount.value) || 0 }; }
     if (entryMode === 'hours') return f.elements.hours.value ? hoursEntryTimes(date, f.elements.hours.value) : null;
     if (!f.elements.start.value) return null;
     const start = atTime(date, f.elements.start.value).getTime();
@@ -365,6 +388,7 @@
   function updateCalc() {
     const t = formToTimes(); const out = $('#entryCalc');
     if (!t || t.end == null) { out.textContent = ''; return; }
+    if (entryRate === 'EXPENSE') { out.textContent = `Expense · ${money(Math.round(t.amount * 100) / 100)}`; return; }
     const e = { rate: entryRate, start: t.start, end: t.end };
     const raw = rawHours(e), bill = billHours(e);
     out.textContent = `${fmtQty(raw)} h worked` + (bill !== raw ? ` → ${fmtQty(bill)} h billed` : '') + ` · ${money(amount(e))}` + (!t.noTimes && new Date(t.end).getDate() !== new Date(t.start).getDate() ? ' · ends next day' : '');
@@ -393,7 +417,10 @@
     doc.setCharSpace(2.5); doc.text(m.title, IL, 112); doc.setCharSpace(0);
     // Logo
     if (m.logo) {
-      try { doc.addImage(m.logo, IR - 72, 70, 72, 72); } catch (e) { drawLogo(doc, IR - 72, 70, 72); }
+      try {
+        const ratio = (db.settings.logoRatio || 1); const lw = Math.min(130, 72 * ratio); const lh = lw / ratio;
+        doc.addImage(m.logo, IR - lw, 70, lw, lh);
+      } catch (e) { drawLogo(doc, IR - 72, 70, 72); }
     } else drawLogo(doc, IR - 72, 70, 72);
 
     let y = 160;
@@ -462,13 +489,34 @@
     ], cx, cy - ry, [1, 1], 'S', false);
   }
 
+  // Fetch the logo once and keep it as a data URL so PDFs have it, even offline.
+  async function ensureLogo(force) {
+    const url = (db.settings.logoUrl || '').trim();
+    if (!url || (db.settings.logo && !force && db.settings.logoFrom === url)) return;
+    try {
+      const res = await fetch(url, { mode: 'cors' }); if (!res.ok) throw new Error(res.status);
+      const blob = await res.blob();
+      const dataUrl = await new Promise((ok, bad) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = bad; r.readAsDataURL(blob); });
+      const img = new Image(); await new Promise((ok, bad) => { img.onload = ok; img.onerror = bad; img.src = dataUrl; });
+      db.settings.logo = dataUrl; db.settings.logoFrom = url; db.settings.logoRatio = img.naturalWidth / img.naturalHeight;
+      save(); renderInvoice();
+    } catch (e) { console.warn('Logo not loaded', e); }
+  }
+
+  function emailParts() {
+    const p = periodByIndex(viewPeriod); const m = invoiceModel(p);
+    const fill = t => String(t || '').replace(/\{period\}/g, m.period).replace(/\{no\}/g, m.no);
+    return { subject: `Invoice ${m.no} - ${m.period}`, body: fill(db.settings.emailBody), to: (db.settings.emailTo || '').trim() };
+  }
+
   async function sharePdf(download) {
     try {
       const { doc, name } = buildPdf();
       const blob = doc.output('blob');
       const file = new File([blob], name, { type: 'application/pdf' });
       if (!download && navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({ files: [file], title: name });
+        const em = emailParts();
+        await navigator.share({ files: [file], title: em.subject, text: em.body });
       } else {
         doc.save(name);
       }
@@ -489,7 +537,7 @@
     const q = s => `"${String(s).replace(/"/g, '""')}"`;
     const lines = [['DATE', 'DESCRIPTION', 'RATE', 'QTY', 'UNIT', 'TOTAL', 'START', 'END'].join(',')];
     entriesIn(p).filter(e => e.end != null).forEach(e => {
-      lines.push([ymd(new Date(e.start)), q(e.desc || ''), e.rate, fmtQty(billHours(e)), rateOf(e.rate), amount(e).toFixed(2), e.noTimes ? '' : hm(new Date(roundTime(e.start))), e.noTimes ? '' : hm(new Date(roundTime(e.end)))].join(','));
+      lines.push([ymd(new Date(e.start)), q(e.desc || ''), e.rate, isExp(e) ? 1 : fmtQty(billHours(e)), isExp(e) ? amount(e) : rateOf(e.rate), amount(e).toFixed(2), e.noTimes ? '' : hm(new Date(roundTime(e.start))), e.noTimes ? '' : hm(new Date(roundTime(e.end)))].join(','));
     });
     shareText(lines.join('\n'), `Time-${p.key}.csv`, 'text/csv');
   }
@@ -502,7 +550,8 @@
     const d = JSON.parse(text);
     if (!d || !Array.isArray(d.entries)) throw new Error('Not a Time Clock backup');
     const entries = d.entries.map(e => ({
-      id: e.id || uid(), rate: e.rate === 'DRIVING' ? 'DRIVING' : 'STANDARD', desc: e.desc || '',
+      id: e.id || uid(), rate: ['DRIVING', 'EXPENSE'].includes(e.rate) ? e.rate : 'STANDARD', desc: e.desc || '',
+      ...(e.rate === 'EXPENSE' ? { amount: Number(e.amount) || 0 } : {}),
       start: typeof e.start === 'number' ? e.start : new Date(e.start).getTime(),
       end: e.end == null ? null : (typeof e.end === 'number' ? e.end : new Date(e.end).getTime()),
       ...(e.noTimes ? { noTimes: true } : {}),
@@ -514,6 +563,62 @@
     if (d.invoiceNos) db.invoiceNos = { ...db.invoiceNos, ...d.invoiceNos };
     save(); viewPeriod = periodIndexFor(new Date()); renderSettings(); renderAll();
     toast(`Imported ${entries.length} entries`);
+  }
+
+  // CSV from Numbers or the old invoice creator: DATE, DESCRIPTION, RATE, QTY, optional UNIT, START, END.
+  function parseCsv(text) {
+    const rows = []; let row = [], cell = '', q = false;
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (q) { if (ch === '"' && text[i + 1] === '"') { cell += '"'; i++; } else if (ch === '"') q = false; else cell += ch; }
+      else if (ch === '"') q = true;
+      else if (ch === ',') { row.push(cell); cell = ''; }
+      else if (ch === '\n' || ch === '\r') { if (ch === '\r' && text[i + 1] === '\n') i++; row.push(cell); rows.push(row); row = []; cell = ''; }
+      else cell += ch;
+    }
+    if (cell || row.length) { row.push(cell); rows.push(row); }
+    return rows.map(r => r.map(c => c.trim())).filter(r => r.some(Boolean));
+  }
+  function csvDate(v) {
+    let m = v.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/); if (m) return `${m[1]}-${pad(+m[2])}-${pad(+m[3])}`;
+    m = v.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/); if (m) { const y = m[3].length === 2 ? 2000 + +m[3] : +m[3]; return `${y}-${pad(+m[1])}-${pad(+m[2])}`; }
+    const d = new Date(v); return isNaN(d) ? null : ymd(d);
+  }
+  function csvTime(v) {
+    const m = String(v || '').match(/(\d{1,2}):(\d{2})\s*([AaPp][Mm])?/); if (!m) return null;
+    let h = +m[1]; const ap = (m[3] || '').toUpperCase();
+    if (ap === 'PM' && h < 12) h += 12; if (ap === 'AM' && h === 12) h = 0;
+    return `${pad(h)}:${m[2]}`;
+  }
+  function importCsv(text) {
+    const rows = parseCsv(text); if (rows.length < 2) throw new Error('No rows in that CSV');
+    const head = rows[0].map(x => x.toUpperCase());
+    const col = (...names) => head.findIndex(x => names.some(n => x.startsWith(n)));
+    const iD = col('DATE'), iDesc = col('DESC'), iR = col('RATE'), iQ = col('QTY', 'HOURS'), iU = col('UNIT'), iS = col('START'), iE = col('END');
+    if (iD < 0 || iDesc < 0) throw new Error('Needs DATE and DESCRIPTION columns');
+    const key = e => [ymd(new Date(e.start)), e.desc.toLowerCase(), e.rate, e.start, e.end, e.amount || ''].join('|');
+    const have = new Set(db.entries.map(key)); let added = 0;
+    rows.slice(1).forEach(r => {
+      const date = csvDate(r[iD] || ''); if (!date) return;
+      const rt = (r[iR] || '').toUpperCase();
+      const rate = rt.includes('DRIV') ? 'DRIVING' : rt.includes('EXP') ? 'EXPENSE' : 'STANDARD';
+      const qty = parseFloat(r[iQ]) || 0; const unit = parseFloat(String(r[iU] || '').replace(/[$,]/g, ''));
+      let e;
+      if (rate === 'EXPENSE') {
+        const start = atTime(date, '00:00').getTime();
+        e = { rate, desc: r[iDesc] || '', start, end: start, noTimes: true, amount: Math.round((isNaN(unit) ? qty : (qty || 1) * unit) * 100) / 100 };
+      } else {
+        const st = iS >= 0 ? csvTime(r[iS]) : null, en = iE >= 0 ? csvTime(r[iE]) : null;
+        if (st && en) {
+          const start = atTime(date, st).getTime(); let end = atTime(date, en).getTime(); if (end <= start) end += DAY;
+          e = { rate, desc: r[iDesc] || '', start, end };
+        } else if (qty > 0) e = { rate, desc: r[iDesc] || '', ...hoursEntryTimes(date, Math.round(qty * 60)) };
+        else return;
+      }
+      if (have.has(key(e))) return;
+      have.add(key(e)); db.entries.push({ id: uid(), ...e }); added++;
+    });
+    save(); renderAll(); toast(`Imported ${added} ${added === 1 ? 'row' : 'rows'}`);
   }
 
   // ---------- wiring ----------
@@ -532,9 +637,10 @@
   });
   $('#addForm').addEventListener('submit', e => {
     e.preventDefault(); const en = addFormEntry(); if (!en) return;
-    if (!en.desc) { toast('Add a client or job'); $('#addForm').elements.desc.focus(); return; }
+    if (!en.desc) { toast(isExp(en) ? 'Say what the expense was' : 'Add a client or job'); $('#addForm').elements.desc.focus(); return; }
+    if (isExp(en) && !(en.amount > 0)) { toast('Add the amount'); return; }
     db.entries.push({ id: uid(), ...en }); save(); haptic();
-    toast(`Added ${en.desc} · ${fmtQty(billHours(en))} h · ${money(amount(en))}`);
+    toast(isExp(en) ? `Added ${en.desc} · ${money(amount(en))}` : `Added ${en.desc} · ${fmtQty(billHours(en))} h · ${money(amount(en))}`);
     viewPeriod = periodIndexFor(new Date(en.start));
     resetAddForm(true); renderAll();
   });
@@ -571,6 +677,12 @@
         }
         break;
       case 'share-pdf': sharePdf(false); break;
+      case 'email': {
+        const em = emailParts();
+        if (!em.to) { toast('Add who to email in Setup'); break; }
+        location.href = `mailto:${em.to.replace(/\s+/g, '')}?subject=${encodeURIComponent(em.subject)}&body=${encodeURIComponent(em.body)}`;
+        break;
+      }
       case 'download-pdf': sharePdf(true); break;
       case 'export-csv': exportCsv(); break;
       case 'backup': backup(); break;
@@ -592,8 +704,9 @@
         start: keep && same(editing.start, t.start) ? editing.start : t.start,
         end: keep && same(editing.end, t.end) ? editing.end : t.end });
       if (t.noTimes) editing.noTimes = true; else delete editing.noTimes;
+      if (entryRate === 'EXPENSE') editing.amount = t.amount; else delete editing.amount;
     } else {
-      db.entries.push({ id: uid(), desc: f.elements.desc.value.trim(), rate: entryRate, start: t.start, end: t.end, ...extra });
+      db.entries.push({ id: uid(), desc: f.elements.desc.value.trim(), rate: entryRate, start: t.start, end: t.end, ...extra, ...(entryRate === 'EXPENSE' ? { amount: t.amount } : {}) });
     }
     save(); closeSheet(); renderAll(); toast('Saved');
   });
@@ -604,6 +717,7 @@
       const el = f.elements[k]; if (!el) return;
       db.settings[k] = el.type === 'number' ? Number(el.value) : el.value.trim();
     });
+    if (db.settings.logoUrl !== db.settings.logoFrom) { db.settings.logo = null; ensureLogo(true); }
     if (!db.settings.periodAnchor) db.settings.periodAnchor = DEFAULT_SETTINGS.periodAnchor;
     save(); fillTimeSelects(document); fillHourSelects(document); viewPeriod = periodIndexFor(new Date()); renderAll(); toast('Settings saved');
   });
@@ -616,7 +730,11 @@
 
   $('#restoreFile').addEventListener('change', async e => {
     const file = e.target.files[0]; if (!file) return;
-    try { restoreFrom(await file.text()); } catch (err) { toast('Import failed: ' + err.message); }
+    try {
+      const text = await file.text();
+      if (/\.csv$/i.test(file.name) || !text.trim().startsWith('{')) importCsv(text); else restoreFrom(text);
+      ensureLogo();
+    } catch (err) { toast('Import failed: ' + err.message); }
     e.target.value = '';
   });
 
@@ -641,6 +759,7 @@
   fillTimeSelects(document); fillHourSelects(document); applyMode($('#addForm'), '#modeSeg', addMode()); resetAddForm(false);
   renderAll(); renderSettings();
   hashImport();
+  ensureLogo();
 
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     navigator.serviceWorker.register('sw.js').catch(() => {});

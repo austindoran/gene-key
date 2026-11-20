@@ -47,8 +47,9 @@
       <div class="pills" id="rateSeg">
         <button type="button" data-rate="STANDARD" class="on">Standard</button>
         <button type="button" data-rate="DRIVING">Driving</button>
+        <button type="button" data-rate="EXPENSE">Expense</button>
       </div>
-      <div class="pills mode" id="modeSeg">
+      <div class="pills mode not-expense" id="modeSeg">
         <button type="button" data-mode="times" class="on">Start and end</button>
         <button type="button" data-mode="hours">Hours only</button>
       </div>
@@ -57,6 +58,7 @@
         <label class="lbl">End<select class="field time-pick" name="end"></select></label>
       </div>
       <label class="lbl hours-only" hidden>How long<select class="field hours-pick" name="hours"></select></label>
+      <label class="lbl expense-only" hidden>Amount in dollars<input class="field" name="amount" type="number" step="0.01" min="0" inputmode="decimal" placeholder="0.00"></label>
       <div class="calc" id="addCalc">—</div>
       <button type="submit" class="honey">Add to time sheet</button>
     </form>
@@ -80,9 +82,11 @@
         <button class="honey" data-act="share-pdf">Send PDF</button>
       </div>
       <div class="inv-row">
+        <button class="btn ghost" data-act="email">Email</button>
         <button class="btn ghost" data-act="download-pdf">Save PDF</button>
-        <button class="btn ghost" data-act="export-csv">Export CSV</button>
       </div>
+      <p class="hint" id="emailHint"></p>
+      <button class="mini" data-act="export-csv">Export CSV</button>
     </div>
     <div class="inv-paper-wrap"><div id="invoicePreview" class="inv-paper"></div></div>
   </section>
@@ -99,6 +103,13 @@
       <div class="card form">
         <input class="field" name="billToName" placeholder="Company name">
         <input class="field" name="billToAddr" placeholder="Company address">
+      </div>
+      <div class="section">Invoice email</div>
+      <div class="card form">
+        <label class="lbl">Send to<input class="field" name="emailTo" type="text" inputmode="email" autocapitalize="off" placeholder="name@example.com, other@example.com"></label>
+        <label class="lbl">Message<textarea class="field" name="emailBody" rows="5"></textarea></label>
+        <p class="hint">{period} and {no} fill in the pay period and invoice number.</p>
+        <label class="lbl">Logo image link<input class="field" name="logoUrl" type="url" autocapitalize="off" placeholder="https://…/logo.png"></label>
       </div>
       <div class="section">Rates</div>
       <div class="card form grid2">
@@ -121,13 +132,13 @@
 
     <div class="section">Backup</div>
     <div class="card form">
-      <p class="hint">Your time stays on this phone. Back up now and then to Files or iCloud Drive.</p>
+      <p class="hint">Your time stays on this phone. Back up now and then to Files or iCloud Drive. Restore also takes a CSV from Numbers with date, description, rate and qty columns.</p>
       <div class="grid2">
         <button class="btn ghost" data-act="backup">Back up</button>
-        <button class="btn ghost" data-act="restore">Restore</button>
+        <button class="btn ghost" data-act="restore">Restore or import CSV</button>
       </div>
     </div>
-    <input type="file" id="restoreFile" accept=".json,application/json,text/plain" hidden>
+    <input type="file" id="restoreFile" accept=".json,.csv,application/json,text/csv,text/plain" hidden>
     <p class="hint" id="installHint"></p>
     <p class="status" id="versionLine"></p>
   </section>
@@ -147,10 +158,11 @@
     <div class="pills" id="entryRateSeg">
       <button type="button" data-rate="STANDARD">Standard</button>
       <button type="button" data-rate="DRIVING">Driving</button>
+      <button type="button" data-rate="EXPENSE">Expense</button>
     </div>
     <label class="lbl">Client or job<input class="field" name="desc" placeholder="Michael Rowe" autocapitalize="words"></label>
     <label class="lbl">Date<input class="field" name="date" type="date" required></label>
-    <div class="pills mode" id="entryModeSeg">
+    <div class="pills mode not-expense" id="entryModeSeg">
       <button type="button" data-mode="times">Start and end</button>
       <button type="button" data-mode="hours">Hours only</button>
     </div>
@@ -159,6 +171,7 @@
       <label class="lbl">End<select class="field time-pick" name="end"></select></label>
     </div>
     <label class="lbl hours-only" hidden>How long<select class="field hours-pick" name="hours"></select></label>
+    <label class="lbl expense-only" hidden>Amount in dollars<input class="field" name="amount" type="number" step="0.01" min="0" inputmode="decimal" placeholder="0.00"></label>
     <div class="calc" id="entryCalc"></div>
     <div class="grid2">
       <button type="button" class="btn ghost warn" data-act="delete-entry">Delete</button>

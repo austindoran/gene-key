@@ -4,8 +4,9 @@ A home-screen iPhone app for clocking in and out and making invoices. It replace
 
 - **Add**: pick the date, the client and Standard or Driving. Then either set Start and End in 15-minute steps (like a row in the Numbers sheet), or switch to **Hours only** and pick just the amount of time (for example 6:45, which is 6.75 h). The next timed row starts where the last one ended.
 - **Log**: every entry in the pay period. Tap one to fix times. Shifts that end after midnight are handled.
-- **Invoice**: builds the invoice for the pay period, then lets you share it as a PDF (Mail, Messages, Files) or export a CSV.
-- **Settings**: names and addresses, rates, pay periods, backup and restore.
+- **Invoice**: builds the invoice for the pay period. Send PDF opens the share sheet with the message filled in. Email opens a message to the addresses in Setup. Save PDF and Export CSV are there too.
+- **Expense** rows: a dollar amount instead of time. They go on the invoice as qty 1.
+- **Setup**: names and addresses, invoice email and message, logo link, rates, pay periods, backup and restore. Restore also imports a CSV from Numbers (DATE, DESCRIPTION, RATE, QTY, optional UNIT, START, END).
 
 ## Billing rules (copied from the Numbers sheet)
 - Standard is $30/hr. Driving is $20/hr.
