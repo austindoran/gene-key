@@ -161,3 +161,8 @@ select.field{font:600 16px var(--display);font-variant-numeric:tabular-nums;colo
 .toast{position:fixed;left:50%;bottom:calc(80px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);
      background:var(--green);color:#F4F0E7;font:600 11px var(--display);letter-spacing:.12em;max-width:calc(100% - 32px);text-align:center;
      text-transform:uppercase;padding:10px 14px;border-radius:8px;z-index:30}
+
+/* Start-and-end vs hours-only switch: quieter than the rate pills */
+.pills.mode button{min-height:40px;font-size:11px;letter-spacing:.08em;color:var(--muted)}
+.pills.mode button.on{background:transparent;border-color:var(--green);color:var(--head)}
+@media (prefers-color-scheme: dark){ .pills.mode button.on{background:transparent;border-color:var(--sage);color:var(--head)} }

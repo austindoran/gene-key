@@ -48,10 +48,15 @@
         <button type="button" data-rate="STANDARD" class="on">Standard</button>
         <button type="button" data-rate="DRIVING">Driving</button>
       </div>
-      <div class="grid2">
+      <div class="pills mode" id="modeSeg">
+        <button type="button" data-mode="times" class="on">Start and end</button>
+        <button type="button" data-mode="hours">Hours only</button>
+      </div>
+      <div class="grid2 times-only">
         <label class="lbl">Start<select class="field time-pick" name="start"></select></label>
         <label class="lbl">End<select class="field time-pick" name="end"></select></label>
       </div>
+      <label class="lbl hours-only" hidden>How long<select class="field hours-pick" name="hours"></select></label>
       <div class="calc" id="addCalc">—</div>
       <button type="submit" class="honey">Add to time sheet</button>
     </form>
@@ -145,10 +150,15 @@
     </div>
     <label class="lbl">Client or job<input class="field" name="desc" placeholder="Michael Rowe" autocapitalize="words"></label>
     <label class="lbl">Date<input class="field" name="date" type="date" required></label>
-    <div class="grid2">
-      <label class="lbl">Start<select class="field time-pick" name="start"></select></label>
-      <label class="lbl" id="endLabel">End<select class="field time-pick" name="end"></select></label>
+    <div class="pills mode" id="entryModeSeg">
+      <button type="button" data-mode="times">Start and end</button>
+      <button type="button" data-mode="hours">Hours only</button>
     </div>
+    <div class="grid2 times-only">
+      <label class="lbl">Start<select class="field time-pick" name="start"></select></label>
+      <label class="lbl">End<select class="field time-pick" name="end"></select></label>
+    </div>
+    <label class="lbl hours-only" hidden>How long<select class="field hours-pick" name="hours"></select></label>
     <div class="calc" id="entryCalc"></div>
     <div class="grid2">
       <button type="button" class="btn ghost warn" data-act="delete-entry">Delete</button>

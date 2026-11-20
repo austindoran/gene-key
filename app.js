@@ -7,7 +7,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '2.1.0';
+  const VERSION = '2.2.0';
   const KEY = 'timeclock.v1';
   const HOUR = 3600000;
   const DAY = 86400000;
@@ -157,7 +157,7 @@
     return `<button class="row entry" data-id="${e.id}">
       <span class="badge">${drive ? ICON_TRUCK : ICON_SAW}</span>
       <span class="nm"><b>${esc(e.desc || 'No name')}${drive ? '<span class="tag">Drive</span>' : ''}</b>
-        <small>${clock12(st)} to ${en ? clock12(en) : '…'} · ${fmtQty(billHours(e))} h</small></span>
+        <small>${e.noTimes ? 'Hours only' : `${clock12(st)} to ${en ? clock12(en) : '…'}`} · ${fmtQty(billHours(e))} h</small></span>
       <span class="amt">${money(amount(e))}</span>
     </button>`;
   }
@@ -186,13 +186,28 @@
     }
     root.querySelectorAll('select.time-pick').forEach(sel => { const keep = sel.value; sel.innerHTML = opts; if (keep) sel.value = keep; });
   }
+  function fillHourSelects(root) {
+    const step = STEP(); let opts = '';
+    for (let m = step; m <= 16 * 60; m += step) {
+      opts += `<option value="${m}">${Math.floor(m / 60)}:${pad(m % 60)} · ${qtyRound(m / 60)} h</option>`;
+    }
+    root.querySelectorAll('select.hours-pick').forEach(sel => { const keep = sel.value; sel.innerHTML = opts; sel.value = keep || '60'; if (!sel.value) sel.value = String(step * Math.round(60 / step)); });
+  }
+  // Mode switch: 'times' (start and end) or 'hours' (just an amount, no time of day)
+  function applyMode(form, segSel, mode) {
+    document.querySelectorAll(segSel + ' button').forEach(b => b.classList.toggle('on', b.dataset.mode === mode));
+    form.querySelectorAll('.times-only').forEach(el => el.hidden = mode !== 'times');
+    form.querySelectorAll('.hours-only').forEach(el => el.hidden = mode !== 'hours');
+  }
+  // Hours-only rows are stored from midnight of their date, flagged noTimes.
+  function hoursEntryTimes(date, mins) { const start = atTime(date, '00:00').getTime(); return { start, end: start + Number(mins) * 60000, noTimes: true }; }
   const toMin = v => { const [h, m] = v.split(':').map(Number); return h * 60 + m; };
   const fromMin = m => { m = ((m % 1440) + 1440) % 1440; return `${pad(Math.floor(m / 60))}:${pad(m % 60)}`; };
   function snap(v) { const st = STEP(); return fromMin(Math.round(toMin(v) / st) * st); }
 
   // Next start = end of the last entry that day (so a drive flows into the job), else 9:00 AM.
   function suggestTimes(date) {
-    const day = db.entries.filter(e => e.end != null && ymd(new Date(e.start)) === date).sort((x, y) => y.end - x.end)[0];
+    const day = db.entries.filter(e => e.end != null && !e.noTimes && ymd(new Date(e.start)) === date).sort((x, y) => y.end - x.end)[0];
     const start = day ? snap(hm(new Date(roundTime(day.end)))) : '09:00';
     return { start, end: fromMin(toMin(start) + 60) };
   }
@@ -206,16 +221,22 @@
   }
   function addFormEntry() {
     const f = $('#addForm'); const date = f.elements.date.value;
-    if (!date || !f.elements.start.value || !f.elements.end.value) return null;
+    if (!date) return null;
+    if (addMode() === 'hours') {
+      if (!f.elements.hours.value) return null;
+      return { rate: selRate, desc: f.elements.desc.value.trim(), ...hoursEntryTimes(date, f.elements.hours.value) };
+    }
+    if (!f.elements.start.value || !f.elements.end.value) return null;
     const start = atTime(date, f.elements.start.value).getTime();
     let end = atTime(date, f.elements.end.value).getTime();
     if (end <= start) end += DAY; // past midnight
     return { rate: selRate, desc: f.elements.desc.value.trim(), start, end };
   }
+  const addMode = () => db.settings.addMode === 'hours' ? 'hours' : 'times';
   function updateAddCalc() {
     const e = addFormEntry(); const out = $('#addCalc'); if (!e) { out.textContent = ''; return; }
     const h = billHours(e);
-    out.innerHTML = `<span>${fmtQty(h)} h × ${money(rateOf(e.rate))}</span><b>${money(amount(e))}</b>` + (new Date(e.end).getDate() !== new Date(e.start).getDate() ? '<small>ends next day</small>' : '');
+    out.innerHTML = `<span>${fmtQty(h)} h × ${money(rateOf(e.rate))}</span><b>${money(amount(e))}</b>` + (!e.noTimes && new Date(e.end).getDate() !== new Date(e.start).getDate() ? '<small>ends next day</small>' : '');
   }
 
   function renderClock() {
@@ -306,7 +327,7 @@
 
   // ---------- actions ----------
   // Edit sheet
-  let editing = null; let entryRate = 'STANDARD';
+  let editing = null; let entryRate = 'STANDARD'; let entryMode = 'times';
   function setEntryRate(r) { entryRate = r; $$('#entryRateSeg button').forEach(b => b.classList.toggle('on', b.dataset.rate === r)); updateCalc(); }
   function openSheet(e, isNew) {
     editing = isNew ? null : e;
@@ -314,9 +335,16 @@
     $('#sheetTitle').textContent = isNew ? 'Add a row' : 'Edit row';
     f.elements.desc.value = e.desc || '';
     f.elements.date.value = ymd(new Date(e.start));
-    f.elements.start.value = hm(new Date(roundTime(e.start)));
-    f.elements.end.value = e.end != null ? hm(new Date(roundTime(e.end))) : '';
-    $('#endLabel').hidden = !isNew && e.end == null;
+    entryMode = e.noTimes ? 'hours' : 'times';
+    if (e.noTimes) {
+      const t = suggestTimes(ymd(new Date(e.start))); f.elements.start.value = t.start; f.elements.end.value = t.end;
+      f.elements.hours.value = String(Math.round(rawHours(e) * 60));
+    } else {
+      f.elements.start.value = hm(new Date(roundTime(e.start)));
+      f.elements.end.value = e.end != null ? hm(new Date(roundTime(e.end))) : '';
+      f.elements.hours.value = String(Math.max(STEP(), Math.round(rawHours(e) * 60 / STEP()) * STEP()));
+    }
+    applyMode(f, '#entryModeSeg', entryMode);
     const del = f.querySelector('[data-act="delete-entry"]');
     del.style.visibility = isNew ? 'hidden' : 'visible'; del.textContent = 'Delete'; delete del.dataset.armed;
     setEntryRate(e.rate || 'STANDARD');
@@ -325,14 +353,13 @@
   function closeSheet() { $('#sheet').hidden = true; editing = null; }
   function formToTimes() {
     const f = $('#entryForm'); const date = f.elements.date.value;
-    if (!date || !f.elements.start.value) return null;
+    if (!date) return null;
+    if (entryMode === 'hours') return f.elements.hours.value ? hoursEntryTimes(date, f.elements.hours.value) : null;
+    if (!f.elements.start.value) return null;
     const start = atTime(date, f.elements.start.value).getTime();
-    let end = null;
-    if (!$('#endLabel').hidden) {
-      if (!f.elements.end.value) return { start, end: null, missingEnd: true };
-      end = atTime(date, f.elements.end.value).getTime();
-      if (end <= start) end += DAY; // past midnight
-    }
+    if (!f.elements.end.value) return { start, end: null, missingEnd: true };
+    let end = atTime(date, f.elements.end.value).getTime();
+    if (end <= start) end += DAY; // past midnight
     return { start, end };
   }
   function updateCalc() {
@@ -340,7 +367,7 @@
     if (!t || t.end == null) { out.textContent = ''; return; }
     const e = { rate: entryRate, start: t.start, end: t.end };
     const raw = rawHours(e), bill = billHours(e);
-    out.textContent = `${fmtQty(raw)} h worked` + (bill !== raw ? ` → ${fmtQty(bill)} h billed` : '') + ` · ${money(amount(e))}` + (t.end - t.start > 0 && new Date(t.end).getDate() !== new Date(t.start).getDate() ? ' · ends next day' : '');
+    out.textContent = `${fmtQty(raw)} h worked` + (bill !== raw ? ` → ${fmtQty(bill)} h billed` : '') + ` · ${money(amount(e))}` + (!t.noTimes && new Date(t.end).getDate() !== new Date(t.start).getDate() ? ' · ends next day' : '');
   }
 
   // PDF
@@ -462,7 +489,7 @@
     const q = s => `"${String(s).replace(/"/g, '""')}"`;
     const lines = [['DATE', 'DESCRIPTION', 'RATE', 'QTY', 'UNIT', 'TOTAL', 'START', 'END'].join(',')];
     entriesIn(p).filter(e => e.end != null).forEach(e => {
-      lines.push([ymd(new Date(e.start)), q(e.desc || ''), e.rate, fmtQty(billHours(e)), rateOf(e.rate), amount(e).toFixed(2), hm(new Date(roundTime(e.start))), hm(new Date(roundTime(e.end)))].join(','));
+      lines.push([ymd(new Date(e.start)), q(e.desc || ''), e.rate, fmtQty(billHours(e)), rateOf(e.rate), amount(e).toFixed(2), e.noTimes ? '' : hm(new Date(roundTime(e.start))), e.noTimes ? '' : hm(new Date(roundTime(e.end)))].join(','));
     });
     shareText(lines.join('\n'), `Time-${p.key}.csv`, 'text/csv');
   }
@@ -478,6 +505,7 @@
       id: e.id || uid(), rate: e.rate === 'DRIVING' ? 'DRIVING' : 'STANDARD', desc: e.desc || '',
       start: typeof e.start === 'number' ? e.start : new Date(e.start).getTime(),
       end: e.end == null ? null : (typeof e.end === 'number' ? e.end : new Date(e.end).getTime()),
+      ...(e.noTimes ? { noTimes: true } : {}),
     })).filter(e => !isNaN(e.start));
     const replace = db.entries.length === 0;
     if (replace) db.entries = entries;
@@ -496,6 +524,12 @@
     updateAddCalc();
   });
   $('#addForm').addEventListener('change', updateAddCalc);
+  document.querySelectorAll('#modeSeg button').forEach(b => b.onclick = () => {
+    db.settings.addMode = b.dataset.mode; save(); applyMode($('#addForm'), '#modeSeg', addMode()); updateAddCalc(); haptic();
+  });
+  document.querySelectorAll('#entryModeSeg button').forEach(b => b.onclick = () => {
+    entryMode = b.dataset.mode; applyMode($('#entryForm'), '#entryModeSeg', entryMode); updateCalc();
+  });
   $('#addForm').addEventListener('submit', e => {
     e.preventDefault(); const en = addFormEntry(); if (!en) return;
     if (!en.desc) { toast('Add a client or job'); $('#addForm').elements.desc.focus(); return; }
@@ -550,12 +584,16 @@
     const t = formToTimes(); if (!t) return;
     if (t.missingEnd) { toast('Add an end time'); return; }
     const f = $('#entryForm');
+    const extra = t.noTimes ? { noTimes: true } : {};
     if (editing) {
       const same = (orig, v) => orig != null && roundTime(orig) === v;
-      Object.assign(editing, { desc: f.elements.desc.value.trim(), rate: entryRate, start: same(editing.start, t.start) ? editing.start : t.start });
-      if (editing.end != null) editing.end = same(editing.end, t.end) ? editing.end : t.end;
+      const keep = !t.noTimes && !editing.noTimes;
+      Object.assign(editing, { desc: f.elements.desc.value.trim(), rate: entryRate,
+        start: keep && same(editing.start, t.start) ? editing.start : t.start,
+        end: keep && same(editing.end, t.end) ? editing.end : t.end });
+      if (t.noTimes) editing.noTimes = true; else delete editing.noTimes;
     } else {
-      db.entries.push({ id: uid(), desc: f.elements.desc.value.trim(), rate: entryRate, start: t.start, end: t.end });
+      db.entries.push({ id: uid(), desc: f.elements.desc.value.trim(), rate: entryRate, start: t.start, end: t.end, ...extra });
     }
     save(); closeSheet(); renderAll(); toast('Saved');
   });
@@ -567,7 +605,7 @@
       db.settings[k] = el.type === 'number' ? Number(el.value) : el.value.trim();
     });
     if (!db.settings.periodAnchor) db.settings.periodAnchor = DEFAULT_SETTINGS.periodAnchor;
-    save(); fillTimeSelects(document); viewPeriod = periodIndexFor(new Date()); renderAll(); toast('Settings saved');
+    save(); fillTimeSelects(document); fillHourSelects(document); viewPeriod = periodIndexFor(new Date()); renderAll(); toast('Settings saved');
   });
 
   $('#invNo').addEventListener('change', e => {
@@ -600,7 +638,7 @@
   window.addEventListener('hashchange', hashImport);
 
   setRate('STANDARD');
-  fillTimeSelects(document); resetAddForm(false);
+  fillTimeSelects(document); fillHourSelects(document); applyMode($('#addForm'), '#modeSeg', addMode()); resetAddForm(false);
   renderAll(); renderSettings();
   hashImport();
 
