@@ -2,144 +2,157 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Time">
-<meta name="theme-color" content="#000000">
+<meta name="apple-mobile-web-app-title" content="Time Sheet">
+<meta name="theme-color" content="#1F3D2F">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
 <link rel="icon" href="icons/icon-192.png">
-<title>Time Clock</title>
+<title>Time Sheet</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="app.css">
 </head>
 <body>
-<div id="app">
-  <header class="top">
-    <div class="period-nav">
-      <button class="icon-btn" data-act="prev-period" aria-label="Previous pay period">‹</button>
-      <div class="period-label">
-        <div id="periodRange">—</div>
-        <div id="periodSummary" class="muted">—</div>
-      </div>
-      <button class="icon-btn" data-act="next-period" aria-label="Next pay period">›</button>
+<header class="bar">
+  <h1><span class="eyebrow">COLORADO SAUNAS</span>Time Sheet</h1>
+  <button class="icon-btn" data-act="this-period">Today</button>
+</header>
+
+<main>
+  <!-- One green hero card: the pay period that matters right now -->
+  <section class="now">
+    <span class="eyebrow" id="heroEyebrow">Pay period</span>
+    <b id="periodRange">—</b>
+    <div class="stat">
+      <div><span class="k">Hours</span><span class="v" id="statHours">0</span></div>
+      <div><span class="k">Earned</span><span class="v" id="statEarned">$0.00</span></div>
     </div>
-  </header>
+    <div class="go">
+      <button class="ghost" data-act="prev-period">Earlier</button>
+      <button class="ghost" data-act="next-period">Later</button>
+    </div>
+  </section>
 
-  <main>
-    <!-- CLOCK -->
-    <section id="view-clock" class="view active">
-      <form id="addForm" class="add-form" autocomplete="off">
-        <label>Date<input class="field" name="date" type="date" required></label>
-        <input class="field big" name="desc" placeholder="Client / job (e.g. Michael Rowe)" autocapitalize="words">
-        <div id="recentChips" class="chips"></div>
-        <div class="seg" id="rateSeg">
-          <button type="button" data-rate="STANDARD" class="on">Standard</button>
-          <button type="button" data-rate="DRIVING">Driving</button>
-        </div>
-        <div class="grid2">
-          <label>Start<select class="field time-pick" name="start"></select></label>
-          <label>End<select class="field time-pick" name="end"></select></label>
-        </div>
-        <div class="add-calc" id="addCalc">—</div>
-        <button type="submit" class="btn primary wide big-btn">Add to timesheet</button>
-      </form>
-
-      <h3 class="section-h" id="dayListH">Today</h3>
-      <div id="todayList" class="list"></div>
-    </section>
-
-    <!-- LOG -->
-    <section id="view-log" class="view">
-      <div class="row-between">
-        <h3 class="section-h">Entries this period</h3>
-        <button class="btn small" data-act="add-entry">+ Add</button>
+  <!-- ADD -->
+  <section id="view-clock" class="view active">
+    <div class="section">Add time <span id="addNote">15 min steps</span></div>
+    <form id="addForm" class="card form" autocomplete="off">
+      <label class="lbl">Date<input class="field" name="date" type="date" required></label>
+      <label class="lbl">Client or job<input class="field" name="desc" placeholder="Michael Rowe" autocapitalize="words"></label>
+      <div id="recentChips" class="chips"></div>
+      <div class="pills" id="rateSeg">
+        <button type="button" data-rate="STANDARD" class="on">Standard</button>
+        <button type="button" data-rate="DRIVING">Driving</button>
       </div>
-      <div id="logList" class="list"></div>
-    </section>
+      <div class="grid2">
+        <label class="lbl">Start<select class="field time-pick" name="start"></select></label>
+        <label class="lbl">End<select class="field time-pick" name="end"></select></label>
+      </div>
+      <div class="calc" id="addCalc">—</div>
+      <button type="submit" class="honey">Add to time sheet</button>
+    </form>
 
-    <!-- INVOICE -->
-    <section id="view-invoice" class="view">
+    <div class="section"><span class="lead" id="dayListH">Today</span> <span id="dayTotal"></span></div>
+    <div id="todayList" class="card list"></div>
+  </section>
+
+  <!-- LOG -->
+  <section id="view-log" class="view">
+    <div class="section">This pay period <button class="mini" data-act="add-entry">Add a row</button></div>
+    <div id="logList" class="list-wrap"></div>
+  </section>
+
+  <!-- INVOICE -->
+  <section id="view-invoice" class="view">
+    <div class="section">Invoice <span id="invNote"></span></div>
+    <div class="card form">
       <div class="inv-controls">
-        <label class="inline">Invoice #
-          <input id="invNo" class="field small" inputmode="numeric">
-        </label>
-        <button class="btn primary" data-act="share-pdf">Share PDF</button>
+        <label class="lbl inline">Invoice no.<input id="invNo" class="field small" inputmode="numeric"></label>
+        <button class="honey" data-act="share-pdf">Send PDF</button>
       </div>
-      <div class="inv-paper-wrap"><div id="invoicePreview" class="inv-paper"></div></div>
-      <div class="inv-actions">
-        <button class="btn" data-act="download-pdf">Save PDF</button>
-        <button class="btn" data-act="export-csv">Export CSV</button>
+      <div class="inv-row">
+        <button class="btn ghost" data-act="download-pdf">Save PDF</button>
+        <button class="btn ghost" data-act="export-csv">Export CSV</button>
       </div>
-    </section>
+    </div>
+    <div class="inv-paper-wrap"><div id="invoicePreview" class="inv-paper"></div></div>
+  </section>
 
-    <!-- SETTINGS -->
-    <section id="view-settings" class="view">
-      <form id="settingsForm" class="settings">
-        <h3 class="section-h">Pay to (you)</h3>
+  <!-- SETTINGS -->
+  <section id="view-settings" class="view">
+    <form id="settingsForm" class="settings">
+      <div class="section">Pay to <span>you</span></div>
+      <div class="card form">
         <input class="field" name="payToName" placeholder="Your name">
         <input class="field" name="payToAddr" placeholder="Your address">
-        <h3 class="section-h">Bill to (client)</h3>
+      </div>
+      <div class="section">Bill to <span>client</span></div>
+      <div class="card form">
         <input class="field" name="billToName" placeholder="Company name">
         <input class="field" name="billToAddr" placeholder="Company address">
-        <h3 class="section-h">Rates</h3>
-        <div class="grid2">
-          <label>Standard $/hr<input class="field" name="rateStandard" type="number" step="0.01" inputmode="decimal"></label>
-          <label>Driving $/hr<input class="field" name="rateDriving" type="number" step="0.01" inputmode="decimal"></label>
-          <label>Round punches to (min)<input class="field" name="roundMin" type="number" inputmode="numeric"></label>
-        </div>
-        <h3 class="section-h">Pay periods</h3>
-        <div class="grid2">
-          <label>A period started on<input class="field" name="periodAnchor" type="date"></label>
-          <label>Period length (days)<input class="field" name="periodDays" type="number" inputmode="numeric"></label>
-          <label>Due (days after end)<input class="field" name="dueDays" type="number" inputmode="numeric"></label>
-          <label>Invoice # of that period<input class="field" name="invoiceStart" type="number" inputmode="numeric"></label>
-        </div>
-        <p class="hint">Invoice numbers count up by one every pay period from the period that holds “A period started on”.</p>
-        <button class="btn primary wide" type="submit">Save settings</button>
-      </form>
-
-      <h3 class="section-h">Backup</h3>
-      <p class="hint">Everything stays on this phone. Back up now and then (Files or iCloud Drive).</p>
-      <div class="grid2">
-        <button class="btn" data-act="backup">Back up</button>
-        <button class="btn" data-act="restore">Restore / import</button>
       </div>
-      <input type="file" id="restoreFile" accept=".json,application/json,text/plain" hidden>
-      <p class="hint" id="installHint"></p>
-      <p class="hint center muted" id="versionLine"></p>
-    </section>
-  </main>
+      <div class="section">Rates</div>
+      <div class="card form grid2">
+        <label class="lbl">Standard $ per hour<input class="field" name="rateStandard" type="number" step="0.01" inputmode="decimal"></label>
+        <label class="lbl">Driving $ per hour<input class="field" name="rateDriving" type="number" step="0.01" inputmode="decimal"></label>
+        <label class="lbl">Time steps in minutes<input class="field" name="roundMin" type="number" inputmode="numeric"></label>
+      </div>
+      <div class="section">Pay periods</div>
+      <div class="card form">
+        <div class="grid2">
+          <label class="lbl">A period started on<input class="field" name="periodAnchor" type="date"></label>
+          <label class="lbl">Days per period<input class="field" name="periodDays" type="number" inputmode="numeric"></label>
+          <label class="lbl">Due days after end<input class="field" name="dueDays" type="number" inputmode="numeric"></label>
+          <label class="lbl">Invoice no. of that period<input class="field" name="invoiceStart" type="number" inputmode="numeric"></label>
+        </div>
+        <p class="hint">Invoice numbers go up by one each pay period, counted from the period that holds the start date.</p>
+        <button class="btn" type="submit">Save settings</button>
+      </div>
+    </form>
 
-  <nav class="tabs">
-    <button data-tab="clock" class="on"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Add</button>
-    <button data-tab="log"><svg viewBox="0 0 24 24"><path d="M5 6h14M5 12h14M5 18h9"/></svg>Log</button>
-    <button data-tab="invoice"><svg viewBox="0 0 24 24"><path d="M6 3h9l3 3v15H6z"/><path d="M9 10h6M9 14h6M9 18h3"/></svg>Invoice</button>
-    <button data-tab="settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></svg>Settings</button>
-  </nav>
-</div>
+    <div class="section">Backup</div>
+    <div class="card form">
+      <p class="hint">Your time stays on this phone. Back up now and then to Files or iCloud Drive.</p>
+      <div class="grid2">
+        <button class="btn ghost" data-act="backup">Back up</button>
+        <button class="btn ghost" data-act="restore">Restore</button>
+      </div>
+    </div>
+    <input type="file" id="restoreFile" accept=".json,application/json,text/plain" hidden>
+    <p class="hint" id="installHint"></p>
+    <p class="status" id="versionLine"></p>
+  </section>
+</main>
+
+<nav class="tabs">
+  <button data-tab="clock" class="on"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Add</button>
+  <button data-tab="log"><svg viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg>Log</button>
+  <button data-tab="invoice"><svg viewBox="0 0 24 24"><path d="M6 3h9l3 3v15H6z"/><path d="M9 10h6M9 14h6M9 18h3"/></svg>Invoice</button>
+  <button data-tab="settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></svg>Setup</button>
+</nav>
 
 <!-- Edit sheet -->
-<div id="sheet" class="sheet" hidden>
-  <div class="sheet-backdrop" data-act="close-sheet"></div>
-  <form id="entryForm" class="sheet-body">
-    <div class="sheet-grab"></div>
-    <h3 id="sheetTitle">Edit entry</h3>
-    <div class="seg" id="entryRateSeg">
+<div id="sheet" class="sheet" hidden data-act="close-sheet">
+  <form id="entryForm" class="panel">
+    <div class="sheet-head"><b id="sheetTitle">Edit row</b><button type="button" class="mini" data-act="close-sheet">Close</button></div>
+    <div class="pills" id="entryRateSeg">
       <button type="button" data-rate="STANDARD">Standard</button>
       <button type="button" data-rate="DRIVING">Driving</button>
     </div>
-    <input class="field" name="desc" placeholder="Description" autocapitalize="words">
-    <label>Date<input class="field" name="date" type="date" required></label>
+    <label class="lbl">Client or job<input class="field" name="desc" placeholder="Michael Rowe" autocapitalize="words"></label>
+    <label class="lbl">Date<input class="field" name="date" type="date" required></label>
     <div class="grid2">
-      <label>Start<select class="field time-pick" name="start"></select></label>
-      <label id="endLabel">End<select class="field time-pick" name="end"></select></label>
+      <label class="lbl">Start<select class="field time-pick" name="start"></select></label>
+      <label class="lbl" id="endLabel">End<select class="field time-pick" name="end"></select></label>
     </div>
-    <div class="muted" id="entryCalc"></div>
+    <div class="calc" id="entryCalc"></div>
     <div class="grid2">
-      <button type="button" class="btn danger" data-act="delete-entry">Delete</button>
-      <button type="submit" class="btn primary">Save</button>
+      <button type="button" class="btn ghost warn" data-act="delete-entry">Delete</button>
+      <button type="submit" class="btn">Save</button>
     </div>
   </form>
 </div>

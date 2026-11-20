@@ -7,7 +7,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '2.0.0';
+  const VERSION = '2.1.0';
   const KEY = 'timeclock.v1';
   const HOUR = 3600000;
   const DAY = 86400000;
@@ -149,14 +149,16 @@
     $$('#rateSeg button').forEach(b => b.classList.toggle('on', b.dataset.rate === r));
   }
 
+  const ICON_TRUCK = '<svg viewBox="0 0 24 24"><path d="M3 7h11v9H3zM14 10h4l3 3v3h-7"/><circle cx="7" cy="17.5" r="1.8"/><circle cx="17" cy="17.5" r="1.8"/></svg>';
+  const ICON_SAW = '<svg viewBox="0 0 24 24"><path d="M4 20h16M6 20V9l6-5 6 5v11"/><path d="M10 20v-6h4v6"/></svg>';
   function entryRow(e) {
-    const s = new Date(roundTime(e.start)); const en = e.end != null ? new Date(roundTime(e.end)) : null;
-    const q = billHours(e);
-    return `<button class="entry ${en ? '' : 'running'}" data-id="${e.id}">
-      <div class="e-desc"><span>${esc(e.desc || '(no description)')}</span><span class="pill ${e.rate}">${e.rate === 'DRIVING' ? 'DRIVE' : 'STD'}</span></div>
-      <div class="e-amt">${money(amount(e))}</div>
-      <div class="e-times">${clock12(s)} – ${en ? clock12(en) : 'now'}</div>
-      <div class="e-qty">${fmtQty(q)} h</div>
+    const st = new Date(roundTime(e.start)); const en = e.end != null ? new Date(roundTime(e.end)) : null;
+    const drive = e.rate === 'DRIVING';
+    return `<button class="row entry" data-id="${e.id}">
+      <span class="badge">${drive ? ICON_TRUCK : ICON_SAW}</span>
+      <span class="nm"><b>${esc(e.desc || 'No name')}${drive ? '<span class="tag">Drive</span>' : ''}</b>
+        <small>${clock12(st)} to ${en ? clock12(en) : '…'} · ${fmtQty(billHours(e))} h</small></span>
+      <span class="amt">${money(amount(e))}</span>
     </button>`;
   }
 
@@ -166,8 +168,11 @@
     const hrs = list.reduce((a, e) => a + qtyRound(billHours(e)), 0);
     const tot = list.reduce((a, e) => a + amount(e), 0);
     const cur = viewPeriod === periodIndexFor(new Date());
-    $('#periodRange').textContent = rangeLabel(p) + (cur ? '' : ` · #${padInv(invoiceNo(p))}`);
-    $('#periodSummary').textContent = `${qtyRound(hrs)} h · ${money(tot)}${cur ? ' · this period' : ''}`;
+    $('#heroEyebrow').textContent = `${cur ? 'This pay period' : 'Pay period'} · Invoice ${padInv(invoiceNo(p))}`;
+    $('#periodRange').textContent = rangeLabel(p);
+    $('#statHours').textContent = String(qtyRound(hrs));
+    $('#statEarned').textContent = money(tot);
+    $('#invNote').textContent = `${rangeLabel(p)} · ${list.length} ${list.length === 1 ? 'row' : 'rows'}`;
   }
 
   // ---------- add form (works like a row in the Numbers sheet) ----------
@@ -224,20 +229,20 @@
     $('#dayListH').textContent = date === ymd(new Date()) ? 'Today' : `${DOW[d.getDay()]} ${Mon[d.getMonth()]} ${d.getDate()}`;
     const list = db.entries.filter(e => ymd(new Date(e.start)) === date).sort((a, b) => a.start - b.start);
     $('#todayList').innerHTML = list.map(entryRow).join('');
+    $('#dayTotal').textContent = list.length ? `${qtyRound(list.reduce((a, e) => a + qtyRound(billHours(e)), 0))} h · ${money(list.reduce((a, e) => a + amount(e), 0))}` : '';
     updateAddCalc();
   }
 
   function renderLog() {
     const p = periodByIndex(viewPeriod);
-    const list = entriesIn(p);
     const byDay = {};
-    list.forEach(e => (byDay[ymd(new Date(e.start))] ||= []).push(e));
-    const html = Object.keys(byDay).sort().reverse().map(k => {
+    entriesIn(p).forEach(e => (byDay[ymd(new Date(e.start))] ||= []).push(e));
+    $('#logList').innerHTML = Object.keys(byDay).sort().reverse().map(k => {
       const d = parseYmd(k); const items = byDay[k];
+      const hrs = items.reduce((a, e) => a + qtyRound(billHours(e)), 0);
       const tot = items.reduce((a, e) => a + amount(e), 0);
-      return `<div class="day-h"><span>${DOW[d.getDay()]} ${Mon[d.getMonth()]} ${d.getDate()}</span><span>${money(tot)}</span></div>` + items.map(entryRow).join('');
+      return `<div class="card"><div class="day-total"><span>${DOW[d.getDay()]} · ${Mon[d.getMonth()]} ${d.getDate()}</span><b>${qtyRound(hrs)} h · ${money(tot)}</b></div>${items.map(entryRow).join('')}</div>`;
     }).join('');
-    $('#logList').innerHTML = html;
   }
 
   function invoiceModel(p) {
@@ -306,13 +311,14 @@
   function openSheet(e, isNew) {
     editing = isNew ? null : e;
     const f = $('#entryForm');
-    $('#sheetTitle').textContent = isNew ? 'Add entry' : (e.end == null ? 'Edit running entry' : 'Edit entry');
+    $('#sheetTitle').textContent = isNew ? 'Add a row' : 'Edit row';
     f.elements.desc.value = e.desc || '';
     f.elements.date.value = ymd(new Date(e.start));
     f.elements.start.value = hm(new Date(roundTime(e.start)));
     f.elements.end.value = e.end != null ? hm(new Date(roundTime(e.end))) : '';
     $('#endLabel').hidden = !isNew && e.end == null;
-    f.querySelector('[data-act="delete-entry"]').style.visibility = isNew ? 'hidden' : 'visible';
+    const del = f.querySelector('[data-act="delete-entry"]');
+    del.style.visibility = isNew ? 'hidden' : 'visible'; del.textContent = 'Delete'; delete del.dataset.armed;
     setEntryRate(e.rate || 'STANDARD');
     $('#sheet').hidden = false;
   }
@@ -473,7 +479,7 @@
       start: typeof e.start === 'number' ? e.start : new Date(e.start).getTime(),
       end: e.end == null ? null : (typeof e.end === 'number' ? e.end : new Date(e.end).getTime()),
     })).filter(e => !isNaN(e.start));
-    const replace = db.entries.length === 0 || confirm(`Replace the ${db.entries.length} entries on this phone with ${entries.length} from the backup?\n\nCancel = merge instead.`);
+    const replace = db.entries.length === 0;
     if (replace) db.entries = entries;
     else { const ids = new Set(db.entries.map(e => e.id)); entries.forEach(e => { if (!ids.has(e.id)) db.entries.push(e); }); }
     if (d.settings) db.settings = { ...DEFAULT_SETTINGS, ...db.settings, ...d.settings };
@@ -492,7 +498,7 @@
   $('#addForm').addEventListener('change', updateAddCalc);
   $('#addForm').addEventListener('submit', e => {
     e.preventDefault(); const en = addFormEntry(); if (!en) return;
-    if (!en.desc) { toast('Add a client / job'); $('#addForm').elements.desc.focus(); return; }
+    if (!en.desc) { toast('Add a client or job'); $('#addForm').elements.desc.focus(); return; }
     db.entries.push({ id: uid(), ...en }); save(); haptic();
     toast(`Added ${en.desc} · ${fmtQty(billHours(en))} h · ${money(amount(en))}`);
     viewPeriod = periodIndexFor(new Date(en.start));
@@ -520,9 +526,15 @@
         const s = atTime(ymd(base), '09:00').getTime();
         openSheet({ rate: 'STANDARD', desc: '', start: s, end: s + 8 * HOUR }, true); break;
       }
-      case 'close-sheet': closeSheet(); break;
+      case 'close-sheet': if (e.target === $('#sheet') || e.target.closest('.mini')) closeSheet(); break;
+      case 'this-period': viewPeriod = periodIndexFor(new Date()); renderAll(); break;
       case 'delete-entry':
-        if (editing && confirm('Delete this entry?')) { db.entries = db.entries.filter(x => x !== editing); save(); closeSheet(); renderAll(); toast('Deleted'); }
+        {
+          const del = e.target.closest('[data-act]');
+          if (!editing) break;
+          if (!del.dataset.armed) { del.dataset.armed = '1'; del.textContent = 'Tap again to delete'; break; }
+          db.entries = db.entries.filter(x => x !== editing); save(); closeSheet(); renderAll(); toast('Row deleted');
+        }
         break;
       case 'share-pdf': sharePdf(false); break;
       case 'download-pdf': sharePdf(true); break;
@@ -581,8 +593,8 @@
   }
 
   const standalone = window.navigator.standalone || matchMedia('(display-mode: standalone)').matches;
-  $('#installHint').textContent = standalone ? '' : 'Tip: in Safari tap Share → Add to Home Screen so this opens full-screen like an app. The home-screen app keeps its own data, so set it up there.';
-  $('#versionLine').textContent = 'Time Clock v' + VERSION;
+  $('#installHint').textContent = standalone ? '' : 'In Safari tap Share, then Add to Home Screen. The home screen app keeps its own data, so set it up there.';
+  $('#versionLine').textContent = 'Saved on this phone · v' + VERSION;
 
   document.addEventListener('visibilitychange', () => { if (!document.hidden) renderAll(); });
   window.addEventListener('hashchange', hashImport);
