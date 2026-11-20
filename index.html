@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Time">
+<meta name="theme-color" content="#000000">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" href="icons/icon-192.png">
+<title>Time Clock</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div id="app">
+  <header class="top">
+    <div class="period-nav">
+      <button class="icon-btn" data-act="prev-period" aria-label="Previous pay period">‹</button>
+      <div class="period-label">
+        <div id="periodRange">—</div>
+        <div id="periodSummary" class="muted">—</div>
+      </div>
+      <button class="icon-btn" data-act="next-period" aria-label="Next pay period">›</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- CLOCK -->
+    <section id="view-clock" class="view active">
+      <div id="clockIdle">
+        <div class="seg" id="rateSeg">
+          <button data-rate="STANDARD" class="on">Standard</button>
+          <button data-rate="DRIVING">Driving</button>
+        </div>
+        <input id="descInput" class="field big" placeholder="Client / job (e.g. Michael Rowe)" autocomplete="off" autocapitalize="words">
+        <div id="recentChips" class="chips"></div>
+        <button id="clockInBtn" class="punch in">
+          <span class="punch-label">CLOCK IN</span>
+          <span class="punch-sub" id="clockInSub"></span>
+        </button>
+      </div>
+
+      <div id="clockActive" hidden>
+        <div class="active-card">
+          <div class="active-top">
+            <span class="pill" id="activeRate">STANDARD</span>
+            <button class="link" data-act="edit-active">Edit</button>
+          </div>
+          <div class="active-desc" id="activeDesc">—</div>
+          <div class="elapsed" id="elapsed">0:00:00</div>
+          <div class="muted" id="activeSince">Since —</div>
+          <div class="muted" id="activeEarn"></div>
+        </div>
+        <button id="clockOutBtn" class="punch out">
+          <span class="punch-label">CLOCK OUT</span>
+          <span class="punch-sub" id="clockOutSub"></span>
+        </button>
+        <button id="switchBtn" class="btn ghost wide">Switch job / start driving →</button>
+      </div>
+
+      <h3 class="section-h">Today</h3>
+      <div id="todayList" class="list"></div>
+    </section>
+
+    <!-- LOG -->
+    <section id="view-log" class="view">
+      <div class="row-between">
+        <h3 class="section-h">Entries this period</h3>
+        <button class="btn small" data-act="add-entry">+ Add</button>
+      </div>
+      <div id="logList" class="list"></div>
+    </section>
+
+    <!-- INVOICE -->
+    <section id="view-invoice" class="view">
+      <div class="inv-controls">
+        <label class="inline">Invoice #
+          <input id="invNo" class="field small" inputmode="numeric">
+        </label>
+        <button class="btn primary" data-act="share-pdf">Share PDF</button>
+      </div>
+      <div class="inv-paper-wrap"><div id="invoicePreview" class="inv-paper"></div></div>
+      <div class="inv-actions">
+        <button class="btn" data-act="download-pdf">Save PDF</button>
+        <button class="btn" data-act="export-csv">Export CSV</button>
+      </div>
+    </section>
+
+    <!-- SETTINGS -->
+    <section id="view-settings" class="view">
+      <form id="settingsForm" class="settings">
+        <h3 class="section-h">Pay to (you)</h3>
+        <input class="field" name="payToName" placeholder="Your name">
+        <input class="field" name="payToAddr" placeholder="Your address">
+        <h3 class="section-h">Bill to (client)</h3>
+        <input class="field" name="billToName" placeholder="Company name">
+        <input class="field" name="billToAddr" placeholder="Company address">
+        <h3 class="section-h">Rates</h3>
+        <div class="grid2">
+          <label>Standard $/hr<input class="field" name="rateStandard" type="number" step="0.01" inputmode="decimal"></label>
+          <label>Driving $/hr<input class="field" name="rateDriving" type="number" step="0.01" inputmode="decimal"></label>
+          <label>Unpaid drive mins<input class="field" name="drivingDeductMin" type="number" inputmode="numeric"></label>
+          <label>Round punches to (min)<input class="field" name="roundMin" type="number" inputmode="numeric"></label>
+        </div>
+        <p class="hint">Drives longer than the unpaid minutes get that much taken off. Shorter drives are billed in full, the same as your Numbers formula.</p>
+        <h3 class="section-h">Pay periods</h3>
+        <div class="grid2">
+          <label>A period started on<input class="field" name="periodAnchor" type="date"></label>
+          <label>Period length (days)<input class="field" name="periodDays" type="number" inputmode="numeric"></label>
+          <label>Due (days after end)<input class="field" name="dueDays" type="number" inputmode="numeric"></label>
+          <label>Invoice # of that period<input class="field" name="invoiceStart" type="number" inputmode="numeric"></label>
+        </div>
+        <p class="hint">Invoice numbers count up by one every pay period from the period that holds “A period started on”.</p>
+        <button class="btn primary wide" type="submit">Save settings</button>
+      </form>
+
+      <h3 class="section-h">Backup</h3>
+      <p class="hint">Everything stays on this phone. Back up now and then (Files or iCloud Drive).</p>
+      <div class="grid2">
+        <button class="btn" data-act="backup">Back up</button>
+        <button class="btn" data-act="restore">Restore / import</button>
+      </div>
+      <input type="file" id="restoreFile" accept=".json,application/json,text/plain" hidden>
+      <p class="hint" id="installHint"></p>
+      <p class="hint center muted" id="versionLine"></p>
+    </section>
+  </main>
+
+  <nav class="tabs">
+    <button data-tab="clock" class="on"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Clock</button>
+    <button data-tab="log"><svg viewBox="0 0 24 24"><path d="M5 6h14M5 12h14M5 18h9"/></svg>Log</button>
+    <button data-tab="invoice"><svg viewBox="0 0 24 24"><path d="M6 3h9l3 3v15H6z"/><path d="M9 10h6M9 14h6M9 18h3"/></svg>Invoice</button>
+    <button data-tab="settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></svg>Settings</button>
+  </nav>
+</div>
+
+<!-- Edit sheet -->
+<div id="sheet" class="sheet" hidden>
+  <div class="sheet-backdrop" data-act="close-sheet"></div>
+  <form id="entryForm" class="sheet-body">
+    <div class="sheet-grab"></div>
+    <h3 id="sheetTitle">Edit entry</h3>
+    <div class="seg" id="entryRateSeg">
+      <button type="button" data-rate="STANDARD">Standard</button>
+      <button type="button" data-rate="DRIVING">Driving</button>
+    </div>
+    <input class="field" name="desc" placeholder="Description" autocapitalize="words">
+    <label>Date<input class="field" name="date" type="date" required></label>
+    <div class="grid2">
+      <label>Start<input class="field" name="start" type="time" required></label>
+      <label id="endLabel">End<input class="field" name="end" type="time"></label>
+    </div>
+    <div class="muted" id="entryCalc"></div>
+    <div class="grid2">
+      <button type="button" class="btn danger" data-act="delete-entry">Delete</button>
+      <button type="submit" class="btn primary">Save</button>
+    </div>
+  </form>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+
+<script src="vendor/jspdf.umd.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
