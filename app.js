@@ -1,14 +1,13 @@
 /* Time Clock: a home-screen time-in/time-out app.
  * Data lives in localStorage on the device. No server.
  * Billing rules mirror the TIME.numbers sheet:
- *   hours = end - start (wraps past midnight)
- *   DRIVING and hours > 0.5  -> hours - 0.5   (configurable)
+ *   hours = end - start (wraps past midnight), every minute billed
  *   STANDARD $30/hr, DRIVING $20/hr            (configurable)
  */
 (() => {
   'use strict';
 
-  const VERSION = '1.0.0';
+  const VERSION = '1.1.0';
   const KEY = 'timeclock.v1';
   const HOUR = 3600000;
   const DAY = 86400000;
@@ -20,7 +19,6 @@
     billToAddr: '',
     rateStandard: 30,
     rateDriving: 20,
-    drivingDeductMin: 30,
     roundMin: 15,
     periodAnchor: '2025-12-15',
     periodDays: 14,
@@ -82,10 +80,7 @@
     const s = roundTime(e.start), en = roundTime(e.end ?? now);
     return Math.max(0, (en - s) / HOUR);
   }
-  function billHours(e, now) {
-    const h = rawHours(e, now); const ded = (Number(db.settings.drivingDeductMin) || 0) / 60;
-    return (e.rate === 'DRIVING' && h > ded) ? h - ded : h;
-  }
+  const billHours = (e, now) => rawHours(e, now);
   const qtyRound = h => Math.round(h * 100) / 100;
   function amount(e, now) { return Math.round(qtyRound(billHours(e, now)) * rateOf(e.rate) * 100) / 100; }
   const money = n => '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });

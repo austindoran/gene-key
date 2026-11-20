@@ -9,7 +9,7 @@ A home-screen iPhone app for clocking in and out and making invoices. It replace
 
 ## Billing rules (copied from the Numbers sheet)
 - Standard is $30/hr. Driving is $20/hr.
-- A drive longer than 30 minutes has 30 minutes taken off. Shorter drives are billed in full.
+- Every minute of driving is billed. There's no unpaid first half hour.
 - Punches are saved at the real time. Billing rounds them to the nearest 15 minutes.
 - Pay periods are 2 weeks long, counted from Mon Dec 15 2025, which was invoice #02. Each period after that adds one to the invoice number. You can change the number on the Invoice tab.
 
